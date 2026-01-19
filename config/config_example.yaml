@@ -1,19 +1,18 @@
-model:
-  name: example_model
-  version: 1.0
-  description: This is an example configuration file for a machine learning model.
-  pre_trained_model_name: neuralmind/bert-base-portuguese-cased
+model_name: example_model
+version: 1.0
+description: This is an example configuration file for a machine learning model.
+pre_trained_model: neuralmind/bert-base-portuguese-cased
 
-  parameters:
-    learning_rate: 2e-5
-    batch_size: 16
-    num_epochs: 4
-    max_length: 512
+parameters:
+  learning_rate: 2e-5
+  batch_size: 16
+  num_epochs: 4
+  max_length: 512
 
-  data:
-    path_to_data: /path/to/data
-    test_split: 0.2
-  
-  mlflow:
-    experiment_name: example_experiment
-    tracking_uri: http://localhost:5000
+data:
+  data_dir: /path/to/data
+  test_split: 0.2
+
+mlflow:
+  experiment_name: example_experiment
+  tracking_uri: http://localhost:5000

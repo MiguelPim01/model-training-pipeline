@@ -1,0 +1,18 @@
+model_name: Modelo de classificação de desinformação sobre vacinas
+version: 1.0
+description: Esse modelo é responsável por classificar desinformação relacionada a vacinas em postagens de redes sociais.
+pre_trained_model: neuralmind/bert-base-portuguese-cased
+
+parameters:
+  learning_rate: 2e-5
+  batch_size: 16
+  num_epochs: 4
+  max_length: 512
+
+data:
+  data_dir: data/desinfo_vacinal
+  test_split: 0.2
+
+mlflow:
+  experiment_name: Desinformação Vacinal
+  tracking_uri: http://localhost:5000
