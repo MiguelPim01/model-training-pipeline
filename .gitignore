@@ -8,3 +8,9 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Data files
+data/desinfo_vacinal/
+
+# Config files
+config/desinfo_vacinal.yaml
