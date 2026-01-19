@@ -5,18 +5,23 @@ class TrainingPipelineTemplate(ABC):
         pass
 
     def run(self):
-        self.load_dataset()
         self.preprocess_data()
+        self.load_dataset()
+        self.load_datamodel()
         self.train_model()
         self.evaluate_model()
         self.deploy_model()
+    
+    @abstractmethod
+    def preprocess_data(self):
+        pass
     
     @abstractmethod
     def load_dataset(self):
         pass
     
     @abstractmethod
-    def preprocess_data(self):
+    def load_datamodel(self):
         pass
     
     @abstractmethod
