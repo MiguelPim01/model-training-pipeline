@@ -16,11 +16,11 @@ class TrainingPipelineTemplate(ABC):
     def preprocess_data(self):
         pass
     
-    @abstractmethod
+    
     def load_dataset(self):
         pass
     
-    @abstractmethod
+    
     def load_datamodel(self):
         pass
     

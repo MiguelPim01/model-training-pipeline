@@ -10,10 +10,11 @@ class ModelParameters(BaseModel):
     batch_size: int
     num_epochs: int
     max_length: Optional[int] = None
+    beta: Optional[float] = None
     
 class ModelData(BaseModel):
     data_dir: str
-    test_split: float
+    val_split: float
 
 class ModelMLFlow(BaseModel):
     experiment_name: Optional[str] = None
@@ -30,6 +31,23 @@ class ModelConfig(BaseModel):
 
 
 def parse_file(config_file_path: str | Path) -> ModelConfig:
+    """Transforms the configuration file into the class ModelConfig
+
+    Args:
+        config_file_path (str | Path): Path to the configuration file.
+
+    Raises:
+        RuntimeError: File not found
+        RuntimeError: Permission denied when accessing the file
+        RuntimeError: OS error occurred when accessing the file
+        RuntimeError: Error parsing YAML file
+        RuntimeError: Error reading configuration file
+        RuntimeError: Configuration file is empty
+        RuntimeError: Config must be a mapping/dict
+
+    Returns:
+        ModelConfig: Parsed model configuration object.
+    """
     try:
         with open(config_file_path, 'r') as f:
             config_file = yaml.safe_load(f)
