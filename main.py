@@ -19,6 +19,13 @@ def parse_args():
         help="Path to the configuration file for training.",
     )
     
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=30,
+        help="Number of training runs to execute.",
+    )
+    
     return parser.parse_args()
 
 def main():
@@ -34,7 +41,7 @@ def main():
     
     logging.info(f"Loaded model configuration: {model_config.model_name} v{model_config.version}")
     
-    template = DesinfoVacinalTemplate(config=model_config)
+    template = DesinfoVacinalTemplate(config=model_config, num_runs=args.runs)
     template.run()
 
 if __name__ == "__main__":
