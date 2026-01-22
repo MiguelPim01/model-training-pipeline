@@ -38,9 +38,6 @@ class DesinfoVacinalPipeline:
             
             # Evaluate model
             self.strategy.evaluate()
-        
-        # Save metrics from the last evaluation
-        self.strategy.save_metrics()
     
     def get_seeds(self):
         seeds = [
