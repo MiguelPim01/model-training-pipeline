@@ -32,15 +32,20 @@ logging.basicConfig(level=logging.INFO,
 class DesinfoVacinalStrategy(TrainingStrategy):
     def __init__(self, config: ModelConfig):
         super().__init__(config)
-        self.device = None
         self.model = None
-        self.tokenizer = None
         self.train_dataloader = None
         self.val_dataloader = None
+        self.curr_seed = None
+        self.X = []
+        self.y = []
+        self.labels = []
         self.predictions = []
         self.actual_labels = []
         self.losses = []
         self.best_fbeta = float('-inf')
+        
+        self.tokenizer = BertTokenizer.from_pretrained(self.config.pre_trained_model)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         self.output_path = Path("models") / Path(self.config.data.data_dir).name
         self.output_path.mkdir(parents=True, exist_ok=True)
@@ -78,9 +83,6 @@ class DesinfoVacinalStrategy(TrainingStrategy):
             test_size=self.config.data.val_split, 
             random_state=seed
         )
-        
-        self.tokenizer = BertTokenizer.from_pretrained(self.config.pre_trained_model)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         self.train_dataset = DesinfoVacinalDataset(
             texts=train_data,

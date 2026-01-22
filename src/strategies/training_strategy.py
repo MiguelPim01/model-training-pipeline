@@ -32,7 +32,7 @@ class TrainingStrategy(ABC):
         pass
     
     @abstractmethod
-    def train(self, epoch: int):
+    def train(self):
         pass
     
     @abstractmethod

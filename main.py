@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 import logging
 import sys
 
-from src.infra.schemas.model_config import ModelConfig, parse_file
+from src.infra.schemas.model_config import parse_file
 from src.templates.desinfo_vacinal_template import DesinfoVacinalTemplate
 
 logging.basicConfig(level=logging.INFO,

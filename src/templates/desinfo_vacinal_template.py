@@ -1,16 +1,14 @@
-import logging
-import sys
-
-from src.pipelines.training_pipeline import TrainingPipeline
-from src.templates.training_pipeline_template import TrainingPipelineTemplate
+from src.pipelines.desinfo_vacinal_pipeline import DesinfoVacinalPipeline
+from templates.training_template import TrainingTemplate
 from src.infra.schemas.model_config import ModelConfig
 from src.strategies.desinfo_vacinal_strategy import DesinfoVacinalStrategy
 
-logging.basicConfig(level=logging.INFO,
-                    format='[%(asctime)s - %(levelname)s] %(message)s',
-                    stream=sys.stdout)
+class DesinfoVacinalTemplate(TrainingTemplate):
+    """Defines the strategy and the pipeline for training Desinfo Vacinal project model.
 
-class DesinfoVacinalTemplate(TrainingPipelineTemplate):
+    Args:
+        TrainingTemplate (_type_): Template base class for training models
+    """
     def __init__(self, config: ModelConfig, num_runs: int = 1):
         super().__init__()
         self.config = config
@@ -19,6 +17,6 @@ class DesinfoVacinalTemplate(TrainingPipelineTemplate):
     
     def run(self):
         strategy = DesinfoVacinalStrategy(self.config)
+        self.pipeline = DesinfoVacinalPipeline(strategy, self.num_runs)
         
-        self.pipeline = TrainingPipeline(strategy, self.num_runs)
         self.pipeline.run()
