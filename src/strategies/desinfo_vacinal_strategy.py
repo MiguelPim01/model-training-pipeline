@@ -188,8 +188,8 @@ class DesinfoVacinalStrategy(TrainingStrategy):
         y_true = np.array(self.actual_labels)
         y_pred = np.array(self.predictions)
         
-        cm = confusion_matrix(y_true, y_pred)
-        display = ConfusionMatrixDisplay(confusion_matrix=cm)
+        cm = confusion_matrix(y_true, y_pred, labels=range(len(self.labels)))
+        display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self.labels)
         
         # Saving Confusion Matrix plot
         fig, ax = plt.subplots(figsize=(8, 8))
