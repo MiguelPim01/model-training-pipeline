@@ -58,6 +58,7 @@ class DesinfoVacinalStrategy(TrainingStrategy):
     
     def preprocess_data(self):
         data_dir = Path(self.config.data.data_dir)
+        data_dir.mkdir(parents=True, exist_ok=True)
         logging.info(f"Preprocessing data from directory: {data_dir}")
         
         try:
