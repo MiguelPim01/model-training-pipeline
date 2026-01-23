@@ -1,5 +1,5 @@
 from src.pipelines.desinfo_vacinal_pipeline import DesinfoVacinalPipeline
-from templates.training_template import TrainingTemplate
+from src.templates.training_template import TrainingTemplate
 from src.infra.schemas.model_config import ModelConfig
 from src.strategies.desinfo_vacinal_strategy import DesinfoVacinalStrategy
 
