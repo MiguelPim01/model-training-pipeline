@@ -17,3 +17,6 @@ config/desinfo_vacinal.yaml
 
 # MLFlow database
 mlflow.db
+
+# Models
+models/
