@@ -185,6 +185,9 @@ class DesinfoVacinalStrategy(TrainingStrategy):
             self.save_metrics()
 
     def save_metrics(self):
+        output_metrics_dir = self.output_path / "metrics"
+        output_metrics_dir.mkdir(parents=True, exist_ok=True)
+        
         # Confusion matrix and metrics saving
         y_true = np.array(self.actual_labels)
         y_pred = np.array(self.predictions)
@@ -196,7 +199,7 @@ class DesinfoVacinalStrategy(TrainingStrategy):
         fig, ax = plt.subplots(figsize=(8, 8))
         display.plot(ax=ax, values_format='d')
         plt.tight_layout()
-        fig.savefig(self.output_path / "metrics" / "confusion_matrix.png", dpi=300)
+        fig.savefig(output_metrics_dir / "confusion_matrix.png", dpi=300)
         plt.close(fig)
         
         # Saving ROC Curve plot
@@ -210,7 +213,7 @@ class DesinfoVacinalStrategy(TrainingStrategy):
         plt.ylabel('True Positive Rate')
         plt.title('Receiver Operating Characteristic (ROC) Curve')
         plt.legend(loc='lower right')
-        plt.savefig(self.output_path / "metrics" / "roc_curve.png", dpi=300)
+        plt.savefig(output_metrics_dir / "roc_curve.png", dpi=300)
         plt.close()
         
         # Saving Classification Report
@@ -223,7 +226,7 @@ class DesinfoVacinalStrategy(TrainingStrategy):
             "auc": float(auc)
         }
         
-        with open(self.output_path / "metrics" / "classification_report.json", "w") as f:
+        with open(output_metrics_dir / "classification_report.json", "w") as f:
             json.dump(metrics, f, indent=4)
     
     def save_best_model(self):
