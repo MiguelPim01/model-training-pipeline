@@ -3,7 +3,6 @@ import shutil
 import sys
 import pandas as pd
 from pathlib import Path
-import matplotlib.pyplot as plt
 import numpy as np
 import json
 import tempfile
@@ -14,11 +13,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer, get_linear_schedule_with_warmup
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    confusion_matrix, ConfusionMatrixDisplay,
-    roc_curve, roc_auc_score, precision_score, accuracy_score, 
-    recall_score, f1_score, fbeta_score
-)
+from sklearn.metrics import roc_auc_score, fbeta_score
 
 import mlflow
 import mlflow.pytorch
@@ -28,6 +23,8 @@ from src.infra.schemas.model_config import ModelConfig
 from src.domain.datasets.desinfo_vacinal_dataset import DesinfoVacinalDataset
 from src.domain.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
 from src.strategies.training_strategy import TrainingStrategy
+
+from src.utils.metrics import save_roc_curve, save_confusion_matrix, save_metrics_report
 
 logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s - %(levelname)s] %(message)s',
@@ -188,46 +185,33 @@ class DesinfoVacinalStrategy(TrainingStrategy):
         output_metrics_dir = self.output_path / "metrics"
         output_metrics_dir.mkdir(parents=True, exist_ok=True)
         
-        # Confusion matrix and metrics saving
         y_true = np.array(self.actual_labels)
         y_pred = np.array(self.predictions)
         
-        cm = confusion_matrix(y_true, y_pred, labels=range(len(self.labels)))
-        display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self.labels)
-        
-        # Saving Confusion Matrix plot
-        fig, ax = plt.subplots(figsize=(8, 8))
-        display.plot(ax=ax, values_format='d')
-        plt.tight_layout()
-        fig.savefig(output_metrics_dir / "confusion_matrix.png", dpi=300)
-        plt.close(fig)
+        # Saving Confusion Matrix
+        save_confusion_matrix(
+            output_path=output_metrics_dir,
+            y_true=y_true,
+            y_pred=y_pred,
+            labels=self.labels,
+            display_labels=["True", "False"]
+        )
         
         # Saving ROC Curve plot
-        fpr, tpr, _ = roc_curve(y_true, y_pred)
-        auc = roc_auc_score(y_true, y_pred)
-        
-        plt.figure()
-        plt.plot(fpr, tpr, label=f'ROC Curve (AUC = {auc:.4f})')
-        plt.plot([0, 1], [0, 1], linestyle='--')
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver Operating Characteristic (ROC) Curve')
-        plt.legend(loc='lower right')
-        plt.savefig(output_metrics_dir / "roc_curve.png", dpi=300)
-        plt.close()
+        save_roc_curve(
+            output_path=output_metrics_dir,
+            y_true=y_true,
+            y_pred=y_pred
+        )
         
         # Saving Classification Report
-        metrics = {
-            "accuracy": float(accuracy_score(y_true, y_pred)),
-            "precision": float(precision_score(y_true, y_pred, average='weighted')),
-            "recall": float(recall_score(y_true, y_pred, average='weighted')),
-            "f1_score": float(f1_score(y_true, y_pred, average='weighted')),
-            "fbeta_score": float(fbeta_score(y_true, y_pred, beta=self.config.parameters.beta, average='weighted')),
-            "auc": float(auc)
-        }
-        
-        with open(output_metrics_dir / "classification_report.json", "w") as f:
-            json.dump(metrics, f, indent=4)
+        save_metrics_report(
+            output_path=output_metrics_dir,
+            y_true=y_true,
+            y_pred=y_pred,
+            beta=self.config.parameters.beta,
+            auc=roc_auc_score(y_true, y_pred)
+        )
     
     def save_best_model(self):
         """ Save the best model to disk atomically
