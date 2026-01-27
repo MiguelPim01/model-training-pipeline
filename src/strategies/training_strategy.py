@@ -42,3 +42,7 @@ class TrainingStrategy(ABC):
     @abstractmethod
     def save_metrics(self):
         pass
+    
+    @abstractmethod
+    def deploy(self):
+        pass

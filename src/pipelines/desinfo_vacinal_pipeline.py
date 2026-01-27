@@ -38,6 +38,8 @@ class DesinfoVacinalPipeline:
             
             # Evaluate model
             self.strategy.evaluate()
+        
+        self.strategy.deploy()
     
     def get_seeds(self):
         seeds = [

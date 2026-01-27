@@ -239,7 +239,7 @@ class DesinfoVacinalStrategy(TrainingStrategy):
         
         atomic_save(checkpoint, self.output_path / "best_model.pth")
     
-    def deploy_best_model(self):
+    def deploy(self):
         """ Deploy the best model to MLflow
         """
         if not self.config.mlflow:
