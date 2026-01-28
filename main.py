@@ -3,7 +3,7 @@ import logging
 import sys
 
 from src.infra.schemas.model_config import parse_file
-from infra.templates.desinfo_vacinal_template import DesinfoVacinalTemplate
+from src.infra.templates.desinfo_vacinal_template import DesinfoVacinalTemplate
 
 logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s - %(levelname)s] %(message)s',

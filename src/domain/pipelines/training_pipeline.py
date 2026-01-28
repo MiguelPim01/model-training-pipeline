@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 
-from domain.strategies.training_strategy import TrainingStrategy
+from src.domain.strategies.training_strategy import ITrainingStrategy
 
 class ITrainingPipeline(ABC):
     """Generic Pipeline for training models
     """
     
-    def __init__(self, strategy: TrainingStrategy):
+    def __init__(self, strategy: ITrainingStrategy):
         self.strategy = strategy
     
     @abstractmethod

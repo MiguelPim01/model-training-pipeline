@@ -1,6 +1,6 @@
 from infra.pipelines.no_test_split_pipeline import NoTestSplitPipeline
 from infra.strategies.torch_strategy import TorchTrainingStrategy
-from domain.templates.training_template import ITrainingTemplate
+from src.domain.templates.training_template import ITrainingTemplate
 from src.infra.schemas.model_config import ModelConfig
 
 class DesinfoVacinalTemplate(ITrainingTemplate):

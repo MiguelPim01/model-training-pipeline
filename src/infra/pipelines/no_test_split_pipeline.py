@@ -2,8 +2,8 @@ from tqdm import tqdm
 import logging
 import sys
 
-from domain.strategies.training_strategy import ITrainingStrategy
-from domain.pipelines.training_pipeline import ITrainingPipeline
+from src.domain.strategies.training_strategy import ITrainingStrategy
+from src.domain.pipelines.training_pipeline import ITrainingPipeline
 
 logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s - %(levelname)s] %(message)s',

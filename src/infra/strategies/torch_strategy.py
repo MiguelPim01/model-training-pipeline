@@ -13,9 +13,9 @@ from transformers import BertTokenizer, get_linear_schedule_with_warmup
 from sklearn.metrics import roc_auc_score, fbeta_score
 from sklearn.model_selection import train_test_split
 
-from infra.datasets.desinfo_vacinal_dataset import DesinfoVacinalDataset
-from infra.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
-from domain.strategies.training_strategy import ITrainingStrategy
+from src.infra.datasets.desinfo_vacinal_dataset import DesinfoVacinalDataset
+from src.infra.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
+from src.domain.strategies.training_strategy import ITrainingStrategy
 from src.infra.schemas.model_config import ModelConfig
 
 from src.utils.metrics import save_roc_curve, save_confusion_matrix, save_metrics_report
