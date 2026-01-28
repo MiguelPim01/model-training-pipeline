@@ -88,7 +88,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
 
         mlflow.pytorch.log_model(
             pytorch_model=model,
-            artifact_path="desinfo_vacinal_model",
+            name="desinfo_vacinal_model",
             registered_model_name=model_name
         )
     
