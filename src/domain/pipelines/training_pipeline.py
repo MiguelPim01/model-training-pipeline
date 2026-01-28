@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from domain.strategies.training_strategy import TrainingStrategy
 
-class TrainingPipeline(ABC):
+class ITrainingPipeline(ABC):
     """Generic Pipeline for training models
     """
     

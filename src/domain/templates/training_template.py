@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-class TrainingTemplate(ABC):
+class ITrainingTemplate(ABC):
     def __init__(self):
         pass
 

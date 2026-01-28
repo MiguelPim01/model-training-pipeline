@@ -1,12 +1,8 @@
 from abc import ABC, abstractmethod
-import os
-import shutil
-import tempfile
-import torch
 
 from src.infra.schemas.model_config import ModelConfig
 
-class TrainingStrategy(ABC):
+class ITrainingStrategy(ABC):
     """Training interface
 
     Args:
