@@ -1,7 +1,7 @@
-from src.pipelines.desinfo_vacinal_pipeline import DesinfoVacinalPipeline
-from src.templates.training_template import TrainingTemplate
+from infra.pipelines.desinfo_vacinal_pipeline import DesinfoVacinalPipeline
+from domain.templates.training_template import TrainingTemplate
 from src.infra.schemas.model_config import ModelConfig
-from src.strategies.desinfo_vacinal_strategy import DesinfoVacinalStrategy
+from infra.strategies.desinfo_vacinal_strategy import DesinfoVacinalStrategy
 
 class DesinfoVacinalTemplate(TrainingTemplate):
     """Defines the strategy and the pipeline for training Desinfo Vacinal project model.

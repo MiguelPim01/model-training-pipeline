@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.strategies.training_strategy import TrainingStrategy
+from domain.strategies.training_strategy import TrainingStrategy
 
 class TrainingPipeline(ABC):
     """Generic Pipeline for training models

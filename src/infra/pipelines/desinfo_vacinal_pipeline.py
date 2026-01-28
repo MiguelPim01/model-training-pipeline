@@ -2,7 +2,7 @@ from tqdm import tqdm
 import logging
 import sys
 
-from src.strategies.training_strategy import TrainingStrategy
+from domain.strategies.training_strategy import TrainingStrategy
 from src.infra.schemas.model_config import ModelConfig
 
 logging.basicConfig(level=logging.INFO,

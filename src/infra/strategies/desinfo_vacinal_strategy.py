@@ -20,9 +20,9 @@ import mlflow.pytorch
 from mlflow.tracking import MlflowClient
 
 from src.infra.schemas.model_config import ModelConfig
-from src.domain.datasets.desinfo_vacinal_dataset import DesinfoVacinalDataset
-from src.domain.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
-from src.strategies.training_strategy import TrainingStrategy
+from infra.datasets.desinfo_vacinal_dataset import DesinfoVacinalDataset
+from infra.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
+from domain.strategies.training_strategy import TrainingStrategy
 
 from src.utils.metrics import save_roc_curve, save_confusion_matrix, save_metrics_report
 
