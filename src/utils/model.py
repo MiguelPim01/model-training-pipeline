@@ -6,7 +6,7 @@ import os
 
 from typing import List
 
-from infra.schemas.model_config import ModelConfig
+from src.infra.schemas.model_config import ModelConfig
 
 def save_best_model(config: ModelConfig, model: torch.nn.Module, labels: List[str], curr_seed: int, best_fbeta: float, output_path: Path):
     """ Save the best model to disk atomically

@@ -9,8 +9,8 @@ import mlflow
 
 import torch
 
-from infra.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
-from infra.schemas.model_config import ModelConfig
+from src.infra.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
+from src.infra.schemas.model_config import ModelConfig
 
 logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s - %(levelname)s] %(message)s',
