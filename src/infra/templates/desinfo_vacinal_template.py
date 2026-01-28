@@ -1,22 +1,20 @@
-from infra.pipelines.desinfo_vacinal_pipeline import DesinfoVacinalPipeline
-from domain.templates.training_template import TrainingTemplate
+from infra.pipelines.no_test_split_pipeline import NoTestSplitPipeline
+from infra.strategies.torch_strategy import TorchTrainingStrategy
+from domain.templates.training_template import ITrainingTemplate
 from src.infra.schemas.model_config import ModelConfig
-from infra.strategies.desinfo_vacinal_strategy import DesinfoVacinalStrategy
 
-class DesinfoVacinalTemplate(TrainingTemplate):
+class DesinfoVacinalTemplate(ITrainingTemplate):
     """Defines the strategy and the pipeline for training Desinfo Vacinal project model.
 
     Args:
-        TrainingTemplate (_type_): Template base class for training models
+        ITrainingTemplate (_type_): Template base class for training models
     """
-    def __init__(self, config: ModelConfig, num_runs: int = 1):
+    def __init__(self, config: ModelConfig):
         super().__init__()
         self.config = config
-        self.num_runs = num_runs
-        self.pipeline = None
     
     def run(self):
-        strategy = DesinfoVacinalStrategy(self.config)
-        self.pipeline = DesinfoVacinalPipeline(strategy, self.num_runs)
+        strategy = TorchTrainingStrategy(self.config)
         
-        self.pipeline.run()
+        pipeline = NoTestSplitPipeline(strategy)
+        pipeline.run()

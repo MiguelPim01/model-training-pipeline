@@ -2,18 +2,18 @@ from tqdm import tqdm
 import logging
 import sys
 
-from domain.strategies.training_strategy import TrainingStrategy
-from src.infra.schemas.model_config import ModelConfig
+from domain.strategies.training_strategy import ITrainingStrategy
+from domain.pipelines.training_pipeline import ITrainingPipeline
 
 logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s - %(levelname)s] %(message)s',
                     stream=sys.stdout)
 
-class DesinfoVacinalPipeline:
+class NoTestSplitPipeline(ITrainingPipeline):
     """Generic Pipeline for training models
     """
     
-    def __init__(self, strategy: TrainingStrategy, num_runs: int = 1):
+    def __init__(self, strategy: ITrainingStrategy, num_runs: int = 30):
         self.strategy = strategy
         self.num_runs = num_runs
     
@@ -23,7 +23,7 @@ class DesinfoVacinalPipeline:
         # Execute setup steps
         self.strategy.preprocess_data()
         
-        seeds = self.get_seeds()
+        seeds = self._get_seeds()
         
         # Train model
         for run in tqdm(range(self.num_runs), desc="Training runs", unit="run"):
@@ -41,7 +41,12 @@ class DesinfoVacinalPipeline:
         
         self.strategy.deploy()
     
-    def get_seeds(self):
+    def _get_seeds(self):
+        """Fix the seeds for reproducibility
+
+        Returns:
+            seeds (list[int]): List of fixed seeds for reproducibility
+        """
         seeds = [
             2911491036, 363228150, 3051923112, 1952483715, 2692766584, 2587916052, 394603965, 
             272074613, 852185489, 1999207708, 3354547254, 3532630342, 3154617754, 2369800138, 
