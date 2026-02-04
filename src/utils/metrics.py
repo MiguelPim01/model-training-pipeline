@@ -4,15 +4,19 @@ import matplotlib.pyplot as plt
 import json
 
 from sklearn.metrics import (
-    RocCurveDisplay, ConfusionMatrixDisplay, confusion_matrix,
+    ConfusionMatrixDisplay, confusion_matrix, roc_curve, auc,
     accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 )
+
+from sklearn.preprocessing import label_binarize
 
 from typing import List
 
 def save_roc_curve(
     output_path: str, 
-    y_true, y_pred,
+    y_true, y_probs,
+    is_binary: bool,
+    labels: List[str] = None,
     filename: str = "roc_curve.png"
 ):
     out = Path(output_path)
@@ -22,26 +26,34 @@ def save_roc_curve(
         out_file = out / filename
     out_file.parent.mkdir(parents=True, exist_ok=True)
     
-    fig, ax = plt.subplots()
-    RocCurveDisplay.from_predictions(
-        y_true,
-        y_pred,
-        name="ROC curve",
-        ax=ax,
-        plot_chance_level=True,
-        despine=True,
-    )
-    ax.set(xlabel="False Positive Rate", ylabel="True Positive Rate", title="Receiver Operating Characteristic (ROC) Curve")
+    plt.figure(figsize=(8, 6))
     
-    fig.tight_layout()
-    fig.savefig(out_file, dpi=300, bbox_inches="tight")
+    if is_binary:
+        fpr, tpr, _ = roc_curve(y_true, y_probs)
+        roc_auc = auc(fpr, tpr)
+        plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})')
+    else:
+        # Multi-class: One-vs-Rest ROC curves
+        n_classes = len(labels)
+        y_true_bin = label_binarize(y_true, classes=list(range(n_classes)))
+        
+        for i in range(n_classes):
+            fpr, tpr, _ = roc_curve(y_true_bin[:, i], y_probs[:, i])
+            roc_auc = auc(fpr, tpr)
+            plt.plot(fpr, tpr, label=f'{labels[i]} (AUC = {roc_auc:.2f})')
     
-    plt.close(fig)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve')
+    plt.legend(loc='lower right')
+    plt.savefig(out_file, dpi=300)
+    plt.close()
 
 def save_confusion_matrix(
     output_path: str, 
     y_true, y_pred, 
-    labels: List[str] = None,
+    labels: List[int] = None,
     display_labels: List[str] = None,
     filename: str = "confusion_matrix.png"
 ):

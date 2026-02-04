@@ -10,10 +10,6 @@ class ITrainingStrategy(ABC):
     """
     def __init__(self, config: ModelConfig):
         self.config = config
-
-    @abstractmethod
-    def preprocess_data(self):
-        pass
     
     @abstractmethod
     def load_dataset(self):

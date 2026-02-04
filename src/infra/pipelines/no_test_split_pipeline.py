@@ -4,6 +4,7 @@ import sys
 
 from src.domain.strategies.training_strategy import ITrainingStrategy
 from src.domain.pipelines.training_pipeline import ITrainingPipeline
+from src.domain.pipelines.data_pipeline import IDataPipeline
 
 logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s - %(levelname)s] %(message)s',
@@ -13,15 +14,16 @@ class NoTestSplitPipeline(ITrainingPipeline):
     """Generic Pipeline for training models
     """
     
-    def __init__(self, strategy: ITrainingStrategy, num_runs: int = 30):
+    def __init__(self, strategy: ITrainingStrategy, data_pipeline: IDataPipeline, num_runs: int = 30):
         self.strategy = strategy
+        self.data_pipeline = data_pipeline
         self.num_runs = num_runs
     
     def run(self):
         logging.info(f"Starting training pipeline with {self.num_runs} runs")
         
         # Execute setup steps
-        self.strategy.preprocess_data()
+        data = self.data_pipeline.load()
         
         seeds = self._get_seeds()
         
@@ -30,7 +32,7 @@ class NoTestSplitPipeline(ITrainingPipeline):
             # Build model
             self.strategy.build_model()
             
-            self.strategy.load_dataset(seeds[run])
+            self.strategy.load_dataset(data, seeds[run])
             self.strategy.load_datamodel()
             
             # Train

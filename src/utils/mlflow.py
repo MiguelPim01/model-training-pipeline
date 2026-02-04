@@ -84,7 +84,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
             
         # Log dataset
         try:
-            train_data_path = Path(config.data.train_data_path)
+            train_data_path = Path(config.data.data_dir) / "train" / "data.csv"
             if train_data_path.exists():
                 df = pd.read_csv(train_data_path)
                 
