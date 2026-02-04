@@ -33,6 +33,7 @@ class TorchTrainingStrategy(ITrainingStrategy):
         self.train_dataloader = None
         self.val_dataloader = None
         self.curr_seed = None
+        self.num_labels = None
         self.labels = []
         self.predictions = []
         self.probabilities = []
