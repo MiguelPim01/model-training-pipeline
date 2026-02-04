@@ -1,10 +1,12 @@
 from pathlib import Path
+import pandas as pd
 import logging
 import json
 import sys
 
 from mlflow.tracking import MlflowClient
 import mlflow.pytorch
+import mlflow.data
 import mlflow
 
 import torch
@@ -27,6 +29,8 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
     
     model_path = output_path / "best_model.pth"
     metrics_path = output_path / "metrics" / "classification_report.json"
+    roc_curve_path = output_path / "metrics" / "roc_curve.png"
+    confusion_matrix_path = output_path / "metrics" / "confusion_matrix.png"
     
     if not model_path.exists():
         logging.error(f"Best model file not found at {model_path}. Deployment aborted.")
@@ -63,6 +67,35 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
 
         # Log the metrics file itself as an artifact
         mlflow.log_artifact(str(metrics_path), artifact_path="metrics")
+        
+        # Log ROC curve if it exists
+        if roc_curve_path.exists():
+            mlflow.log_artifact(str(roc_curve_path), artifact_path="metrics")
+            logging.info(f"ROC curve logged from {roc_curve_path}")
+        else:
+            logging.warning(f"ROC curve not found at {roc_curve_path}")
+
+        # Log confusion matrix if it exists
+        if confusion_matrix_path.exists():
+            mlflow.log_artifact(str(confusion_matrix_path), artifact_path="metrics")
+            logging.info(f"Confusion matrix logged from {confusion_matrix_path}")
+        else:
+            logging.warning(f"Confusion matrix not found at {confusion_matrix_path}")
+            
+        # Log dataset
+        try:
+            train_data_path = Path(config.data.train_data_path)
+            if train_data_path.exists():
+                df = pd.read_csv(train_data_path)
+                
+                dataset = mlflow.data.from_pandas(df, source=str(train_data_path))
+                mlflow.log_input(dataset, context="training")
+                
+                logging.info(f"Training dataset logged from {train_data_path}")
+            else:
+                logging.warning(f"Training data not found at {train_data_path}")
+        except Exception as e:
+            logging.error(f"Failed to log dataset: {e}")
 
         checkpoint = torch.load(model_path, map_location="cpu")  # cpu is safer for portability
 
@@ -92,28 +125,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
             registered_model_name=model_name
         )
     
-    # Log model and metrics outside the run for visibility
-    mlflow.log_metric("val_precision", metrics["precision"])
-    mlflow.log_metric("val_accuracy", metrics["accuracy"])
-    mlflow.log_metric("val_fbeta", metrics["fbeta_score"])
-    mlflow.log_metric("val_recall", metrics["recall"])
-    mlflow.log_metric("val_f1", metrics["f1_score"])
-    mlflow.log_metric("val_auc", metrics["auc"])
-    
-    checkpoint = torch.load(model_path, map_location=device)
-    
-    model = DesinfoVacinalModel(
-        pretrained_model_name=checkpoint["bert_model_name"],
-        num_labels=checkpoint["num_classes"]
-    )
-    
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device)
-    
-    # Log the model to MLflow
-    mlflow.pytorch.log_model(model, artifact_path="desinfo_vacinal_model")
-    
-    logging.info(f"Best model deployed to MLflow under experiment '{config.mlflow.experiment_name}'.")
+    logging.info(f"Model deployed and registered under the name '{model_name}' in MLflow.")
     
     client = MlflowClient()
     latest = client.get_latest_versions(model_name)
