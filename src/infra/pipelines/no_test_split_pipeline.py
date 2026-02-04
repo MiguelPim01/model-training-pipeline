@@ -29,11 +29,12 @@ class NoTestSplitPipeline(ITrainingPipeline):
         
         # Train model
         for run in tqdm(range(self.num_runs), desc="Training runs", unit="run"):
-            # Build model
-            self.strategy.build_model()
-            
+            # Load dataset first (sets num_labels)
             self.strategy.load_dataset(data, seeds[run])
             self.strategy.load_datamodel()
+            
+            # Build model (needs num_labels from load_dataset)
+            self.strategy.build_model()
             
             # Train
             self.strategy.train()
