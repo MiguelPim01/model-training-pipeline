@@ -22,7 +22,7 @@ class ModelMLFlow(BaseModel):
 
 class ModelConfig(BaseModel):
     model_name: str
-    version: float
+    version: Optional[float] = None
     description: Optional[str] = None
     pre_trained_model: Optional[str] = None
     parameters: ModelParameters

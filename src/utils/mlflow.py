@@ -18,6 +18,43 @@ logging.basicConfig(level=logging.INFO,
                     format='[%(asctime)s - %(levelname)s] %(message)s',
                     stream=sys.stdout)
 
+
+def _get_next_version(client: MlflowClient, experiment_name: str) -> float:
+    """Get the next version number based on the latest run in the experiment.
+    
+    Args:
+        client: MLflow client instance
+        experiment_name: Name of the MLflow experiment
+        
+    Returns:
+        Next version number (incremented by 0.1 from the last version, or 1.0 if no runs exist)
+    """
+    experiment = client.get_experiment_by_name(experiment_name)
+    if experiment is None:
+        return 1.0
+    
+    runs = client.search_runs(
+        experiment_ids=[experiment.experiment_id],
+        order_by=["start_time DESC"],
+        max_results=1
+    )
+    
+    if not runs:
+        return 1.0
+    
+    # Extract version from run_name (e.g., "model_v1.0" -> 1.0)
+    last_run_name = runs[0].info.run_name
+    if last_run_name and last_run_name.startswith("model_v"):
+        try:
+            last_version = float(last_run_name.replace("model_v", ""))
+            return round(last_version + 0.1, 1)
+        except ValueError:
+            logging.warning(f"Could not parse version from run name: {last_run_name}")
+            return 1.0
+    
+    return 1.0
+
+
 def deploy_run(config: ModelConfig, output_path: Path, device: str):
     """ Deploy the best model to MLflow
     """
@@ -41,13 +78,22 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
     
     mlflow.set_tracking_uri(config.mlflow.tracking_uri)
     mlflow.set_experiment(config.mlflow.experiment_name)
+    
+    # Determine version: use config value or auto-increment
+    client = MlflowClient()
+    if config.version is not None:
+        version = config.version
+        logging.info(f"Using version from config: {version}")
+    else:
+        version = _get_next_version(client, config.mlflow.experiment_name)
+        logging.info(f"Auto-generated version: {version}")
 
     # Log models metrics
     with open(metrics_path, "r") as f:
         metrics = json.load(f)
     
     # One run for everything (metrics + model + artifacts)
-    run_name = "deploy_best_model"
+    run_name = f"model_v{version}"
     with mlflow.start_run(run_name=run_name):
         # Log metrics safely
         metric_map = {
@@ -127,7 +173,6 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
     
     logging.info(f"Model deployed and registered under the name '{model_name}' in MLflow.")
     
-    client = MlflowClient()
     latest = client.get_latest_versions(model_name)
     
     print("Latest versions:", [(v.version, v.current_stage) for v in latest])
