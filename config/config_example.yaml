@@ -12,7 +12,8 @@ parameters:
 
 data:
   data_dir: /path/to/data
-  val_split: 0.2
+  test_split: 0.2
+  val_split: 0.1
 
 mlflow:
   experiment_name: example_experiment

@@ -16,6 +16,7 @@ class ModelParameters(BaseModel):
 
 class ModelData(BaseModel):
     data_dir: str
+    test_split: Optional[float] = None
     val_split: float
 
 

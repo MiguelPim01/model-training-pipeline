@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 
 
-def _get_next_version(client: MlflowClient, experiment_name: str) -> float:
+def _get_next_version(client: MlflowClient, experiment_name: str, version: float = None) -> float:
     """Get the next version number based on the latest run in the experiment.
 
     Args:
@@ -31,6 +31,9 @@ def _get_next_version(client: MlflowClient, experiment_name: str) -> float:
     Returns:
         Next version number (incremented by 0.1 from the last version, or 1.0 if no runs exist)
     """
+    if version is not None:
+        return version
+    
     experiment = client.get_experiment_by_name(experiment_name)
     if experiment is None:
         return 1.0
@@ -86,7 +89,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
         version = config.version
         logging.info(f"Using version from config: {version}")
     else:
-        version = _get_next_version(client, config.mlflow.experiment_name)
+        version = _get_next_version(client, config.mlflow.experiment_name, config.version)
         logging.info(f"Auto-generated version: {version}")
 
     # Log models metrics
