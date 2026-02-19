@@ -14,34 +14,36 @@ import torch
 from src.infra.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
 from src.infra.schemas.model_config import ModelConfig
 
-logging.basicConfig(level=logging.INFO,
-                    format='[%(asctime)s - %(levelname)s] %(message)s',
-                    stream=sys.stdout)
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s - %(levelname)s] %(message)s",
+    stream=sys.stdout,
+)
 
 
 def _get_next_version(client: MlflowClient, experiment_name: str) -> float:
     """Get the next version number based on the latest run in the experiment.
-    
+
     Args:
         client: MLflow client instance
         experiment_name: Name of the MLflow experiment
-        
+
     Returns:
         Next version number (incremented by 0.1 from the last version, or 1.0 if no runs exist)
     """
     experiment = client.get_experiment_by_name(experiment_name)
     if experiment is None:
         return 1.0
-    
+
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         order_by=["start_time DESC"],
-        max_results=1
+        max_results=1,
     )
-    
+
     if not runs:
         return 1.0
-    
+
     # Extract version from run_name (e.g., "model_v1.0" -> 1.0)
     last_run_name = runs[0].info.run_name
     if last_run_name and last_run_name.startswith("model_v"):
@@ -51,34 +53,33 @@ def _get_next_version(client: MlflowClient, experiment_name: str) -> float:
         except ValueError:
             logging.warning(f"Could not parse version from run name: {last_run_name}")
             return 1.0
-    
+
     return 1.0
 
 
 def deploy_run(config: ModelConfig, output_path: Path, device: str):
-    """ Deploy the best model to MLflow
-    """
+    """Deploy the best model to MLflow"""
     if not config.mlflow:
         logging.info("MLflow deployment is disabled in the configuration.")
         return
-    
+
     model_name = "desinfo_vacinal_model"
-    
+
     model_path = output_path / "best_model.pth"
     metrics_path = output_path / "metrics" / "classification_report.json"
     roc_curve_path = output_path / "metrics" / "roc_curve.png"
     confusion_matrix_path = output_path / "metrics" / "confusion_matrix.png"
-    
+
     if not model_path.exists():
         logging.error(f"Best model file not found at {model_path}. Deployment aborted.")
         return
     if not metrics_path.exists():
         logging.error(f"Metrics file not found at {metrics_path}. Deployment aborted.")
         return
-    
+
     mlflow.set_tracking_uri(config.mlflow.tracking_uri)
     mlflow.set_experiment(config.mlflow.experiment_name)
-    
+
     # Determine version: use config value or auto-increment
     client = MlflowClient()
     if config.version is not None:
@@ -91,7 +92,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
     # Log models metrics
     with open(metrics_path, "r") as f:
         metrics = json.load(f)
-    
+
     # One run for everything (metrics + model + artifacts)
     run_name = f"model_v{version}"
     with mlflow.start_run(run_name=run_name):
@@ -104,7 +105,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
             "val_fbeta": "fbeta_score",
             "val_auc": "auc",
         }
-        
+
         for mlflow_key, metrics_key in metric_map.items():
             if metrics_key in metrics:
                 mlflow.log_metric(mlflow_key, float(metrics[metrics_key]))
@@ -113,7 +114,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
 
         # Log the metrics file itself as an artifact
         mlflow.log_artifact(str(metrics_path), artifact_path="metrics")
-        
+
         # Log ROC curve if it exists
         if roc_curve_path.exists():
             mlflow.log_artifact(str(roc_curve_path), artifact_path="metrics")
@@ -127,23 +128,25 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
             logging.info(f"Confusion matrix logged from {confusion_matrix_path}")
         else:
             logging.warning(f"Confusion matrix not found at {confusion_matrix_path}")
-            
+
         # Log dataset
         try:
             train_data_path = Path(config.data.data_dir) / "train" / "data.csv"
             if train_data_path.exists():
                 df = pd.read_csv(train_data_path)
-                
+
                 dataset = mlflow.data.from_pandas(df, source=str(train_data_path))
                 mlflow.log_input(dataset, context="training")
-                
+
                 logging.info(f"Training dataset logged from {train_data_path}")
             else:
                 logging.warning(f"Training data not found at {train_data_path}")
         except Exception as e:
             logging.error(f"Failed to log dataset: {e}")
 
-        checkpoint = torch.load(model_path, map_location="cpu")  # cpu is safer for portability
+        checkpoint = torch.load(
+            model_path, map_location="cpu"
+        )  # cpu is safer for portability
 
         # Log useful params
         mlflow.log_param("bert_model_name", checkpoint.get("bert_model_name"))
@@ -155,12 +158,12 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
         mlflow.log_param("val_split", config.data.val_split)
         mlflow.log_param("seed", checkpoint.get("seed"))
         mlflow.log_param("beta", config.parameters.beta)
-        
+
         model = DesinfoVacinalModel(
             pretrained_model_name=checkpoint["bert_model_name"],
             num_labels=checkpoint["num_classes"],
         )
-        
+
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
         model.cpu()
@@ -168,11 +171,13 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
         mlflow.pytorch.log_model(
             pytorch_model=model,
             name="desinfo_vacinal_model",
-            registered_model_name=model_name
+            registered_model_name=model_name,
         )
-    
-    logging.info(f"Model deployed and registered under the name '{model_name}' in MLflow.")
-    
+
+    logging.info(
+        f"Model deployed and registered under the name '{model_name}' in MLflow."
+    )
+
     latest = client.get_latest_versions(model_name)
-    
+
     print("Latest versions:", [(v.version, v.current_stage) for v in latest])

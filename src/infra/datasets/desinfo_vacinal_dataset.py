@@ -1,12 +1,14 @@
 import torch
 from torch.utils.data import Dataset
 
+
 class DesinfoVacinalDataset(Dataset):
     """Dataset class for Desinfo Vacinal Project.
 
     Args:
         Dataset (_type_): Interface for PyTorch datasets.
     """
+
     def __init__(self, texts, labels, tokenizer, max_length):
         self.texts = texts
         self.labels = labels
@@ -33,12 +35,19 @@ class DesinfoVacinalDataset(Dataset):
         # Gets the item at the specified index
         text = self.texts[idx]
         label = self.labels[idx]
-        
+
         # Tokenizes the text using the provided tokenizer
-        encoding = self.tokenizer(text, return_tensors='pt', max_length=self.max_length, padding='max_length', truncation=True)
-        
+        encoding = self.tokenizer(
+            text,
+            return_tensors="pt",
+            max_length=self.max_length,
+            padding="max_length",
+            truncation=True,
+        )
+
         # Returns tensors for input IDs, attention mask, and label
-        return {'input_ids': encoding['input_ids'].flatten(), 'attention_mask': encoding['attention_mask'].flatten(), 'label': torch.tensor(label)}
-        
-        
-        
+        return {
+            "input_ids": encoding["input_ids"].flatten(),
+            "attention_mask": encoding["attention_mask"].flatten(),
+            "label": torch.tensor(label),
+        }
