@@ -4,32 +4,31 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-A modular, extensible pipeline for training text classification models with PyTorch and Hugging Face Transformers.
+A modular, extensible pipeline for training classification models with PyTorch and Hugging Face Transformers.
 
 ---
 
 ## Overview
 
-**Model Training Pipeline** provides a clean, template-based architecture for training and evaluating text classification models. It handles the complete ML workflow—from data loading and preprocessing to training, evaluation, and experiment tracking with MLflow.
+**Model Training Pipeline** provides a clean, template-based architecture for training and evaluating classification models. It handles the complete ML workflow—from data loading and preprocessing to training, evaluation, and experiment tracking with MLflow.
 
 **Who is this for?**
 
-- ML engineers building text classification systems
-- Researchers running reproducible experiments with multiple seeds
-- Teams needing standardized training workflows with experiment tracking
+- ML engineers building classification systems;
+- Researchers running reproducible experiments with multiple seeds;
+- Teams needing standardized training workflows with experiment tracking.
 
 **Main use-cases:**
 
-- Fine-tuning BERT-based models for text classification
-- Running multiple training runs with different seeds for statistical robustness
-- Tracking experiments and deploying models via MLflow
+- Fine-tuning BERT-based models for text classification;
+- Running multiple training runs with different seeds for statistical robustness;
+- Tracking experiments and deploying models via MLflow.
 
 ---
 
 ## Key Features
 
 - **Template-based architecture** — Swap data pipelines, training strategies, and models via clean interfaces
-- **Multi-run training** — Run 30 seeds by default for statistically robust results
 - **Automatic text preprocessing** — Unicode normalization, HTML decoding, URL removal, deduplication
 - **MLflow integration** — Log parameters, metrics, artifacts, and deploy models
 - **YAML configuration** — Single config file drives the entire training run
@@ -48,8 +47,8 @@ A modular, extensible pipeline for training text classification models with PyTo
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │  1. Data    │───▶│  2. Train   │───▶│  3. Eval    │───▶│  4. Deploy  │
-│   Load &    │    │   Model     │    │   Metrics   │    │   MLflow    │
-│  Preprocess │    │  (30 runs)  │    │   & Save    │    │             │
+│     Load &  │    │     Model   │    │     Metrics │    │     MLflow  │
+│  Preprocess │    │             │    │     & Save  │    │             │
 └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
@@ -68,8 +67,7 @@ model-training-pipeline/
 ├── pyproject.toml              # Project metadata and dependencies
 ├── uv.lock                     # Locked dependencies (reproducibility)
 ├── config/
-│   ├── config_example.yaml     # Example configuration
-│   └── desinfo_vacinal.yaml    # Production config for vaccine misinfo model
+│   └── config_example.yaml     # Example configuration
 ├── data/
 │   └── <project>/
 │       └── train/
@@ -152,17 +150,17 @@ uv run python -c "import torch; print(torch.__version__)"
 
 ## Quickstart
 
-Run a complete training pipeline in under 5 minutes:
+Run a complete training pipeline:
 
 ```bash
 # 1. Ensure you have data in the expected location
 ls data/desinfo_vacinal/train/data.csv
 
 # 2. Run training with the example config
-uv run python main.py --config config/desinfo_vacinal.yaml
+uv run python main.py --config config/<project>.yaml
 
 # 3. Check outputs
-ls models/desinfo_vacinal/
+ls models/<project>/
 # Expected: best_model.pth, metrics/
 ```
 
@@ -170,7 +168,7 @@ ls models/desinfo_vacinal/
 
 ```
 [2026-02-18 10:00:00 - INFO] Loaded model configuration: Modelo de classificação... v1.0
-[2026-02-18 10:00:01 - INFO] Loading data from: data/desinfo_vacinal/train/data.csv
+[2026-02-18 10:00:01 - INFO] Loading data from: data/<project>/train/data.csv
 [2026-02-18 10:00:01 - INFO] Preprocessing completed. Final samples: 1234
 Training runs: 100%|████████████████████| 30/30 [15:32<00:00, 31.08s/run]
 [2026-02-18 10:15:33 - INFO] Best model saved with F-beta: 0.8721
@@ -203,9 +201,9 @@ Configuration files live in `config/` and use YAML format.
 ### Example Configuration
 
 ```yaml
-model_name: Modelo de classificação de desinformação sobre vacinas
+model_name: Your model name
 version: 1.0
-description: Classifies vaccine misinformation in social media posts
+description: Your model description
 pre_trained_model: neuralmind/bert-base-portuguese-cased
 
 parameters:
@@ -216,11 +214,12 @@ parameters:
   beta: 0.5                # F-beta score beta value
 
 data:
-  data_dir: data/desinfo_vacinal  # Path to data directory
-  val_split: 0.2                   # Validation split ratio
+  data_dir: data/<project>  # Path to data directory
+  test_split: 0.2           # Test split ratio
+  val_split: 0.1            # Validation split ratio
 
 mlflow:
-  experiment_name: Desinformação Vacinal
+  experiment_name: Experiment Name
   tracking_uri: http://localhost:5000
 ```
 
@@ -233,7 +232,8 @@ mlflow:
 | `parameters.batch_size` | Samples per batch | `16` |
 | `parameters.num_epochs` | Training epochs | `4` |
 | `parameters.max_length` | Max sequence length | `512` |
-| `data.val_split` | Validation set fraction | `0.2` |
+| `data.test_split` | Test set fraction | `0.2` |
+| `data.val_split` | Validation set fraction | `0.1` |
 
 ---
 
@@ -247,6 +247,8 @@ Place your data in `data/<project>/train/data.csv` with these columns:
 |--------|------|-------------|
 | `text` | string | Input text to classify |
 | `label` | string | Class label |
+
+> If you want to use another dataset configuration you should implement it from the `IDataPipeline` interface.
 
 ### Example
 
@@ -274,10 +276,10 @@ The `CSVDataPipeline` automatically:
 ### Starting a Run
 
 ```bash
-uv run python main.py --config config/desinfo_vacinal.yaml
+uv run python main.py --config config/<project>.yaml
 ```
 
-The pipeline runs 30 training iterations with different random seeds to ensure statistical robustness. The best model (highest F-beta score) is saved automatically.
+The `NoTestSplitPipeline` pipeline runs 30 training iterations with different random seeds to ensure statistical robustness. The best model (highest F-beta score) is saved automatically.
 
 ### Training Details
 
@@ -403,7 +405,7 @@ class MyModel(nn.Module):
 
 2. Update strategy to use your model in `build_model()`
 
-### Adding a New Dataset
+### Adding New Data
 
 1. Implement `IDataPipeline` interface:
 
@@ -418,6 +420,8 @@ class MyDataPipeline(IDataPipeline):
 ```
 
 2. Use in your template
+
+> You can also implement your own training strategies, templates and pipelines extending the interfaces needed.
 
 ### Required Interfaces
 
