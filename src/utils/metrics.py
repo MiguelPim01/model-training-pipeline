@@ -124,3 +124,23 @@ def save_metrics_report(
 
     with open(out_file, "w") as f:
         json.dump(metrics, f, indent=4)
+
+def save_training_history(history, output_path: str, filename: str = "training_history.png"):
+    out = Path(output_path)
+    if out.suffix.lower() in {".png", ".jpg", ".jpeg", ".pdf", ".svg"}:
+        out_file = out
+    else:
+        out_file = out / filename
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    history = np.array(history)
+    
+    plt.figure(figsize=(8, 6))
+    plt.plot(history[:, 0], '-', color='orange', label='train')
+    plt.plot(history[:, 1], '-', color='blue', label='val')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss History')
+    plt.legend()
+    plt.savefig(out_file, dpi=300)
+    plt.close()

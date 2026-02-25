@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
 import logging
@@ -18,7 +19,7 @@ from src.domain.strategies.training_strategy import ITrainingStrategy
 from src.infra.schemas.model_config import ModelConfig
 from src.domain.pipelines.data_pipeline import ProcessedData
 
-from src.utils.metrics import save_roc_curve, save_confusion_matrix, save_metrics_report
+from src.utils.metrics import save_roc_curve, save_confusion_matrix, save_metrics_report, save_training_history
 from src.utils.model import save_best_model
 from src.utils.mlflow import deploy_run
 
@@ -42,6 +43,9 @@ class TorchTrainingStrategy(ITrainingStrategy):
         self.probabilities = []
         self.actual_labels = []
         self.losses = []
+        self.history = []
+        self.running_loss = 0.0
+        self.val_loss = 0.0
         self.best_fbeta = float("-inf")
 
         self.tokenizer = BertTokenizer.from_pretrained(self.config.pre_trained_model)
@@ -95,7 +99,7 @@ class TorchTrainingStrategy(ITrainingStrategy):
         ).to(self.device)
 
     def train(self):
-        self.model.train()
+        self.history = []
 
         optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=self.config.parameters.learning_rate
@@ -111,6 +115,9 @@ class TorchTrainingStrategy(ITrainingStrategy):
             self.losses = list()
             loss_fn = nn.CrossEntropyLoss()
 
+            self.model.train()
+            self.running_loss = 0.0
+            
             for batch in self.train_dataloader:
                 optimizer.zero_grad()
 
@@ -127,6 +134,28 @@ class TorchTrainingStrategy(ITrainingStrategy):
 
                 optimizer.step()
                 scheduler.step()
+                
+                self.running_loss += loss.item()
+            
+            self.running_loss /= len(self.train_dataset)
+            
+            self.model.eval()
+            self.val_loss = 0.0
+            
+            with torch.no_grad():
+                for batch in self.val_dataloader:
+                    input_ids = batch["input_ids"].to(self.device)
+                    attention_mask = batch["attention_mask"].to(self.device)
+                    labels = batch["label"].to(self.device)
+
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+
+                    loss = loss_fn(outputs, labels)
+                    self.val_loss += loss.item()
+            
+            self.val_loss /= len(self.val_dataset)
+        
+            self.history.append([self.running_loss, self.val_loss])
 
     def evaluate(self):
         self.model.eval()
@@ -176,6 +205,12 @@ class TorchTrainingStrategy(ITrainingStrategy):
                 best_fbeta=self.best_fbeta,
                 output_path=self.output_path,
             )
+            
+            save_training_history(
+                history=self.history,
+                output_path=self.output_path,
+            )
+        
 
     def save_metrics(self):
         output_metrics_dir = self.output_path / "metrics"
