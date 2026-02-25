@@ -208,7 +208,7 @@ class TorchTrainingStrategy(ITrainingStrategy):
             
             save_training_history(
                 history=self.history,
-                output_path=self.output_path,
+                output_path=self.output_path / "metrics",
             )
         
 
