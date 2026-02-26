@@ -72,6 +72,7 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
     metrics_path = output_path / "metrics" / "classification_report.json"
     roc_curve_path = output_path / "metrics" / "roc_curve.png"
     confusion_matrix_path = output_path / "metrics" / "confusion_matrix.png"
+    loss_curve_path = output_path / "metrics" / "training_history.png"
 
     if not model_path.exists():
         logging.error(f"Best model file not found at {model_path}. Deployment aborted.")
@@ -79,6 +80,8 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
     if not metrics_path.exists():
         logging.error(f"Metrics file not found at {metrics_path}. Deployment aborted.")
         return
+    if not loss_curve_path.exists():
+        logging.warning(f"Loss curve file not found at {loss_curve_path}")
 
     mlflow.set_tracking_uri(config.mlflow.tracking_uri)
     mlflow.set_experiment(config.mlflow.experiment_name)
@@ -131,6 +134,13 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
             logging.info(f"Confusion matrix logged from {confusion_matrix_path}")
         else:
             logging.warning(f"Confusion matrix not found at {confusion_matrix_path}")
+        
+        # Log training history if it exists
+        if loss_curve_path.exists():
+            mlflow.log_artifact(str(loss_curve_path), artifact_path="metrics")
+            logging.info(f"Training history logged from {loss_curve_path}")
+        else:            
+            logging.warning(f"Training history not found at {loss_curve_path}")
 
         # Log dataset
         try:
