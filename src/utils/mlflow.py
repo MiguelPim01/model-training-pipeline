@@ -21,6 +21,52 @@ logging.basicConfig(
 )
 
 
+def download_model(
+    tracking_uri: str,
+    model_name: str,
+    version: str | None = None,
+    stage: str | None = None,
+    device: str = "cpu",
+) -> torch.nn.Module:
+    """Download a model from MLflow Model Registry.
+
+    Args:
+        tracking_uri: MLflow tracking server URI
+        model_name: Name of the registered model
+        version: Specific version number to download (e.g., "1", "2")
+        stage: Model stage to download (e.g., "Production", "Staging", "None")
+        device: Device to load the model on ("cpu" or "cuda")
+
+    Returns:
+        The loaded PyTorch model
+
+    Raises:
+        ValueError: If neither version nor stage is provided
+        Exception: If model loading fails
+    """
+    if version is None and stage is None:
+        raise ValueError("Either 'version' or 'stage' must be provided")
+
+    mlflow.set_tracking_uri(tracking_uri)
+
+    if version is not None:
+        model_uri = f"models:/{model_name}/{version}"
+        logging.info(f"Downloading model '{model_name}' version {version}")
+    else:
+        model_uri = f"models:/{model_name}/{stage}"
+        logging.info(f"Downloading model '{model_name}' stage '{stage}'")
+
+    try:
+        model = mlflow.pytorch.load_model(model_uri, map_location=device)
+        model.to(device)
+        model.eval()
+        logging.info(f"Model successfully loaded from {model_uri}")
+        return model
+    except Exception as e:
+        logging.error(f"Failed to download model: {e}")
+        raise
+
+
 def _get_next_version(client: MlflowClient, experiment_name: str, version: float = None) -> float:
     """Get the next version number based on the latest run in the experiment.
 
