@@ -57,10 +57,15 @@ class TorchInferenceUseCase(IInferenceUseCase):
             text: Input text to classify
 
         Returns:
-            Predicted label (0 or 1)
+            Predicted label (0 or 1), or -1 if text is invalid
         """
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model and tokenizer must be loaded before inference")
+
+        # Handle NaN, None, or non-string values
+        if not isinstance(text, str) or pd.isna(text):
+            logging.warning(f"Invalid text value encountered: {type(text)}. Returning -1.")
+            return -1
 
         # Tokenize the input text
         encoding = self.tokenizer(
