@@ -21,6 +21,12 @@ def parse_args():
         required=True,
         help="Path to the configuration file for training.",
     )
+    
+    parser.add_argument(
+        "--inference",
+        action="store_true",
+        help="Whether to run in inference mode.",
+    )
 
     return parser.parse_args()
 
@@ -29,6 +35,7 @@ def main():
     args = parse_args()
 
     config_file_path = args.config
+    inference = args.inference
 
     try:
         model_config = parse_file(config_file_path)
@@ -40,7 +47,7 @@ def main():
         f"Loaded model configuration: {model_config.model_name} v{model_config.version}"
     )
 
-    template = DesinfoVacinalTemplate(config=model_config)
+    template = DesinfoVacinalTemplate(config=model_config, inference=inference)
     template.run()
 
 

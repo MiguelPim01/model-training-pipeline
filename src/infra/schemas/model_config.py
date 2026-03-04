@@ -24,6 +24,8 @@ class ModelMLFlow(BaseModel):
     experiment_name: Optional[str] = None
     tracking_uri: Optional[str] = None
 
+class Inference(BaseModel):
+    input_data_path: Optional[str] = None
 
 class ModelConfig(BaseModel):
     model_name: str
@@ -33,7 +35,7 @@ class ModelConfig(BaseModel):
     parameters: ModelParameters
     data: ModelData
     mlflow: Optional[ModelMLFlow] = None
-
+    inference: Optional[Inference] = None
 
 def parse_file(config_file_path: str | Path) -> ModelConfig:
     """Transforms the configuration file into the class ModelConfig
