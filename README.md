@@ -181,15 +181,18 @@ Training runs: 100%|████████████████████
 ### Main CLI
 
 ```bash
-uv run python main.py --config <path-to-config.yaml>
+uv run python main.py --config <path-to-config.yaml> --inference
 ```
+
+- `--config`: Defines the path to the config file you created.
+- `--inference`: Optional argument for inference module. If **False**, training module will be run, otherwise, inference model will be run.
 
 ### Common Commands
 
 | Task | Command |
 |------|---------|
 | Train model | `uv run python main.py --config config/desinfo_vacinal.yaml` |
-| Start MLflow UI | `uv run mlflow ui --port 5000` |
+| Start MLflow Server | `uv run mlflow server --port 5000` |
 | View metrics | `cat models/desinfo_vacinal/metrics/classification_report.json` |
 
 ---
@@ -450,13 +453,13 @@ uv run pytest --cov=src
 
 ```bash
 # Check code style
-uv run ruff check src
+uvx ruff check src
 
 # Auto-fix issues
-uv run ruff check src --fix
+uvx ruff check src --fix
 
 # Format code
-uv run ruff format src
+uvx ruff format src
 ```
 
 ### Pre-commit Hooks (recommended)
