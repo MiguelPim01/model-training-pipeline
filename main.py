@@ -9,6 +9,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s - %(levelname)s] %(message)s",
     stream=sys.stdout,
+    force=True
 )
 
 
@@ -43,9 +44,7 @@ def main():
         logging.error(f"Error loading configuration: {e}")
         return
 
-    logging.info(
-        f"Loaded model configuration: {model_config.model_name} v{model_config.version}"
-    )
+    logging.info(f"Loaded model configuration: {model_config.model_name} v{model_config.version}")
 
     template = DesinfoVacinalTemplate(config=model_config, inference=inference)
     template.run()

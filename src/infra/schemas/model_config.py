@@ -8,15 +8,17 @@ from yaml import YAMLError
 
 class ModelParameters(BaseModel):
     learning_rate: float
+    dropout_rate: float
     batch_size: int
     num_epochs: int
     max_length: Optional[int] = None
     beta: Optional[float] = None
+    weight_decay: Optional[float] = None
 
 
 class ModelData(BaseModel):
     data_dir: str
-    test_split: Optional[float] = None
+    test_split: float
     val_split: float
 
 

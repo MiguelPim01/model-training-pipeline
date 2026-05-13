@@ -5,10 +5,12 @@ pre_trained_model: neuralmind/bert-base-portuguese-cased
 
 parameters:
   learning_rate: 2e-5
+  dropout_rate: 0.3
   batch_size: 16
   num_epochs: 4
   max_length: 512
   beta: 0.5
+  weight_decay: 0.01
 
 data:
   data_dir: /path/to/data

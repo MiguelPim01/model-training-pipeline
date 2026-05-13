@@ -11,14 +11,14 @@ class DesinfoVacinalModel(nn.Module):
         nn.Module: Base class for all neural network modules in PyTorch.
     """
 
-    def __init__(self, pretrained_model_name, num_labels):
+    def __init__(self, pretrained_model_name, num_labels, dropout_rate):
         super().__init__()
 
         # Loads a pre-trained BERT model
         self.bert = BertModel.from_pretrained(pretrained_model_name)
 
         # Dropout layer for regularization
-        self.dropout = nn.Dropout(p=0.3)
+        self.dropout = nn.Dropout(p=dropout_rate)
 
         # Classifier layer to output logits for each class
         self.classifier = nn.Linear(

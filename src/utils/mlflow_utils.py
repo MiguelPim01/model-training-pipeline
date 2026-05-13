@@ -16,19 +16,14 @@ from src.infra.schemas.model_config import ModelConfig
 
 logging.basicConfig(
     level=logging.INFO,
-    format="[%(asctime)s - %(levelname)s] %(message)s",
+    format="[%(asctime)s - %(levelname)s] %(message)s]",
     stream=sys.stdout,
 )
 
 
-def download_model(
-    tracking_uri: str,
-    model_name: str,
-    version: str | None = None,
-    stage: str | None = None,
-    device: str = "cpu",
-) -> torch.nn.Module:
-    """Download a model from MLflow Model Registry.
+def download_model(tracking_uri: str, model_name: str, version: str | None = None, stage: str | None = None, device: str = "cpu") -> torch.nn.Module:
+    """
+    Download a model from MLflow Model Registry.
 
     Args:
         tracking_uri: MLflow tracking server URI
@@ -44,10 +39,23 @@ def download_model(
         ValueError: If neither version nor stage is provided
         Exception: If model loading fails
     """
-    if version is None and stage is None:
-        raise ValueError("Either 'version' or 'stage' must be provided")
-
     mlflow.set_tracking_uri(tracking_uri)
+    
+    model_uri = None
+    
+    if version is None and stage is None:
+        logging.info("No version or stage specified, defaulting to latest version")
+        
+        client = MlflowClient()
+        
+        latest_version = client.search_model_versions(f"name='{model_name}'", order_by=["version DESC"], max_results=1)
+        
+        if latest_version is None or len(latest_version) == 0:
+            raise ValueError(f"Model '{model_name}' not found in MLflow Model Registry")
+
+        model_uri = f"models:/{model_name}/{latest_version[0].version}"
+
+        logging.info(f"Downloading model '{model_name}' version {latest_version[0].version}")
 
     if version is not None:
         model_uri = f"models:/{model_name}/{version}"
@@ -59,8 +67,9 @@ def download_model(
     try:
         model = mlflow.pytorch.load_model(model_uri, map_location=device)
         model.to(device)
-        model.eval()
+        
         logging.info(f"Model successfully loaded from {model_uri}")
+        
         return model
     except Exception as e:
         logging.error(f"Failed to download model: {e}")
@@ -215,12 +224,16 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
         mlflow.log_param("num_epochs", config.parameters.num_epochs)
         mlflow.log_param("lr", config.parameters.learning_rate)
         mlflow.log_param("val_split", config.data.val_split)
+        mlflow.log_param("test_split", config.data.test_split)
         mlflow.log_param("seed", checkpoint.get("seed"))
         mlflow.log_param("beta", config.parameters.beta)
+        mlflow.log_param("weight_decay", config.parameters.weight_decay)
+        mlflow.log_param("dropout_rate", config.parameters.dropout_rate)
 
         model = DesinfoVacinalModel(
             pretrained_model_name=checkpoint["bert_model_name"],
             num_labels=checkpoint["num_classes"],
+            dropout_rate=config.parameters.dropout_rate,
         )
 
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -240,3 +253,16 @@ def deploy_run(config: ModelConfig, output_path: Path, device: str):
     latest = client.get_latest_versions(model_name)
 
     print("Latest versions:", [(v.version, v.current_stage) for v in latest])
+
+
+if __name__ == "__main__":
+    # Checking all versions available for the model
+    tracking_uri = "http://localhost:5000"
+    model_name = "desinfo_vacinal_model"
+    
+    mlflow.set_tracking_uri(tracking_uri)
+    client = MlflowClient()
+    
+    versions = client.search_model_versions(f"name='{model_name}'")
+    for v in versions:
+        print(f"Version: {v.version}, Stage: {v.current_stage}, Run ID: {v.run_id}")

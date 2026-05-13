@@ -20,7 +20,7 @@ from src.domain.pipelines.data_pipeline import ProcessedData
 
 from src.utils.metrics import save_roc_curve, save_confusion_matrix, save_metrics_report, save_training_history
 from src.utils.model import save_best_model
-from src.utils.mlflow import deploy_run
+from utils.mlflow_utils import deploy_run
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,13 +60,24 @@ class TorchTrainingStrategy(ITrainingStrategy):
         self.num_labels = len(set(data.labels))
         self.labels = data.labels
 
+        train_data, test_data, train_labels, test_labels = train_test_split(
+            data.X, data.y, test_size=self.config.data.test_split, random_state=seed, stratify=data.y
+        )
+        
         train_data, val_data, train_labels, val_labels = train_test_split(
-            data.X, data.y, test_size=self.config.data.val_split, random_state=seed
+            train_data, train_labels, test_size=self.config.data.val_split, random_state=seed, stratify=train_labels
         )
 
         self.train_dataset = DesinfoVacinalDataset(
             texts=train_data,
             labels=train_labels,
+            tokenizer=self.tokenizer,
+            max_length=self.config.parameters.max_length,
+        )
+
+        self.test_dataset = DesinfoVacinalDataset(
+            texts=test_data,
+            labels=test_labels,
             tokenizer=self.tokenizer,
             max_length=self.config.parameters.max_length,
         )
@@ -85,6 +96,12 @@ class TorchTrainingStrategy(ITrainingStrategy):
             shuffle=True,
         )
 
+        self.test_dataloader = DataLoader(
+            self.test_dataset,
+            batch_size=self.config.parameters.batch_size,
+            shuffle=False,
+        )
+
         self.val_dataloader = DataLoader(
             self.val_dataset,
             batch_size=self.config.parameters.batch_size,
@@ -95,13 +112,16 @@ class TorchTrainingStrategy(ITrainingStrategy):
         self.model = DesinfoVacinalModel(
             pretrained_model_name=self.config.pre_trained_model,
             num_labels=self.num_labels,
+            dropout_rate=self.config.parameters.dropout_rate,
         ).to(self.device)
 
     def train(self):
         self.history = []
 
         optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=self.config.parameters.learning_rate
+            self.model.parameters(), 
+            lr=self.config.parameters.learning_rate, 
+            weight_decay=self.config.parameters.weight_decay
         )
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
@@ -136,7 +156,7 @@ class TorchTrainingStrategy(ITrainingStrategy):
                 
                 self.running_loss += loss.item()
             
-            self.running_loss /= len(self.train_dataset)
+            self.running_loss /= len(self.train_dataloader)
             
             self.model.eval()
             self.val_loss = 0.0
@@ -152,7 +172,7 @@ class TorchTrainingStrategy(ITrainingStrategy):
                     loss = loss_fn(outputs, labels)
                     self.val_loss += loss.item()
             
-            self.val_loss /= len(self.val_dataset)
+            self.val_loss /= len(self.val_dataloader)
         
             self.history.append([self.running_loss, self.val_loss])
 
@@ -165,7 +185,7 @@ class TorchTrainingStrategy(ITrainingStrategy):
 
         # Enters a context where gradients are not calculated
         with torch.no_grad():
-            for batch in self.val_dataloader:
+            for batch in self.test_dataloader:
                 # Moving the tensors of the batch to the desired device (CPU or GPU)
                 input_ids = batch["input_ids"].to(self.device)
                 attention_mask = batch["attention_mask"].to(self.device)

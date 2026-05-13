@@ -9,7 +9,7 @@ import torch
 
 from src.domain.use_cases.inference_use_case import IInferenceUseCase
 from src.infra.schemas.model_config import ModelConfig
-from src.utils.mlflow import download_model
+from utils.mlflow_utils import download_model
 
 logging.basicConfig(
     level=logging.INFO,
