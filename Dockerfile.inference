@@ -1,0 +1,58 @@
+# --- Stage 1: Build Stage ---
+# This stage installs compilers and builds dependencies
+FROM python:3.10-slim AS builder
+
+# Set environment variables for build efficiency
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1
+
+WORKDIR /app
+
+# Install system dependencies needed for compiling certain Python wheels
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install 'uv' by copying the binary from the official image (fastest method)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Copy only dependency files first to maximize Docker layer caching
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies into the .venv directory
+# --no-install-project avoids copying source code in this layer
+RUN uv sync --frozen --no-dev --no-install-project
+
+# --- Stage 2: Runtime Stage ---
+# This is the final image that will be deployed
+FROM python:3.10-slim
+
+# Re-apply runtime-specific environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    # Add the virtual environment to the PATH so 'python' refers to the .venv version
+    PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+# Copy the pre-built virtual environment from the builder stage
+# This leaves behind the build-essential tools, making the image much smaller
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy the application source code
+COPY . .
+
+# Document that the container listens on port 8000 (FastAPI default)
+EXPOSE 8000
+
+# Metadata labels
+LABEL org.opencontainers.image.source=https://github.com/labicdna/desinformacao-painel-saude
+LABEL org.opencontainers.image.description="Container image to identify misinformation in social media posts"
+LABEL org.opencontainers.image.licenses=MIT
+
+# Run the script directly using the environment's python
+# Since we added .venv/bin to PATH, we don't need 'uv run'
+CMD ["python", "api_inference.py"]

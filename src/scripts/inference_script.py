@@ -15,11 +15,11 @@ which can be used for monitoring and alerting purposes.
 import os
 import sys
 import json
+import socket
 import logging
 import psycopg
 
 from time import sleep
-from socket import socket
 from dotenv import load_dotenv
 from argparse import ArgumentParser
 

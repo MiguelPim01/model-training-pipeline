@@ -22,3 +22,6 @@ mlruns/
 
 # Models
 models/
+
+# Env
+.env

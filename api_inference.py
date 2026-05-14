@@ -1,6 +1,9 @@
 """
 Inference API for making predictions to the database using the trained model.
 
+Basic workflow:
+1. Run uvicorn to start the API.
+2. API runs the update thread and the inference process.
 """
 
 import os
@@ -9,6 +12,7 @@ import json
 import GPUtil
 import socket
 import psutil
+import uvicorn
 import logging
 import psycopg
 import subprocess
@@ -18,6 +22,7 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 from threading import Thread, Event
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 
 # ----- Configuration -----
 load_dotenv()
@@ -28,6 +33,9 @@ UPDATE_INTERVAL_MINUTES = int(os.getenv("UPDATE_INTERVAL_MINUTES", 120))
 
 UPDATE_FILE_NAME = os.getenv("UPDATE_FILE_NAME", "update_records.json")
 CONFIG_FILE_PATH = os.getenv("CONFIG_FILE_PATH", "config/desinfo_vacinal.yaml")
+
+API_HOST = os.getenv("API_HOST", "::")
+API_PORT = int(os.getenv("API_PORT", 8000))
 # -----
 
 # ----- Basic checks -----
@@ -134,7 +142,8 @@ def inference_child_process_handler():
     server.bind(("localhost", 9999))
     server.listen(1)
     
-    child = subprocess.Popen(["python3", "src/infra/inference_script.py", "--config", CONFIG_FILE_PATH])
+    # sys.executable uses the exact same python that the current script is running on
+    child = subprocess.Popen([sys.executable, "-m", "src.scripts.inference_script", "--config", CONFIG_FILE_PATH])
     conn, addr = server.accept() # wait for connection from child process
     
     logging.info("Child process started and connected.")
@@ -157,7 +166,8 @@ def inference_child_process_handler():
     healthy_classification = False
     healthy_update = False
 
-async def lifespan():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """
     Handles application startup and shutdown logic.
     """
@@ -213,3 +223,13 @@ def health_check():
         "unprocessed_posts": num_unprocessed_posts
     }
 # -----
+
+def main():
+    """
+    Main function to run the API using Uvicorn.
+    """
+    uvicorn.run("api_inference:app", host=API_HOST, port=API_PORT)
+
+
+if __name__ == "__main__":
+    main()
