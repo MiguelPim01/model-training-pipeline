@@ -784,6 +784,12 @@ wheels = [
 ]
 
 [[package]]
+name = "gputil"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/0e/5c61eedde9f6c87713e89d794f01e378cfd9565847d4576fa627d758c554/GPUtil-1.4.0.tar.gz", hash = "sha256:099e52c65e512cdfa8c8763fca67f5a5c2afb63469602d5dcb4d296b3661efb9", size = 5545, upload-time = "2018-12-18T09:12:13.63Z" }
+
+[[package]]
 name = "graphene"
 version = "3.4.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1511,6 +1517,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "gputil" },
     { name = "ipykernel" },
     { name = "mlflow" },
     { name = "psycopg", extra = ["binary"] },
@@ -1527,6 +1534,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.128.0" },
+    { name = "gputil", specifier = ">=1.4.0" },
     { name = "ipykernel", specifier = ">=7.1.0" },
     { name = "mlflow", specifier = ">=3.8.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
