@@ -9,7 +9,7 @@ import torch
 
 from src.domain.use_cases.inference_use_case import IInferenceUseCase
 from src.infra.schemas.model_config import ModelConfig
-from utils.mlflow_utils import download_model
+from src.utils.mlflow_utils import download_model
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,7 +41,6 @@ class TorchInferenceUseCase(IInferenceUseCase):
         self.model = download_model(
             tracking_uri=self.config.mlflow.tracking_uri,
             model_name=model_name,
-            stage="None",  # Gets the latest version
             device=self.device,
         )
         self.model.eval()
@@ -49,6 +48,10 @@ class TorchInferenceUseCase(IInferenceUseCase):
         # Load tokenizer based on the pre-trained model
         self.tokenizer = BertTokenizer.from_pretrained(self.config.pre_trained_model)
         logging.info(f"Tokenizer loaded from {self.config.pre_trained_model}")
+    
+    def _load_s3_model(self):
+        """Download and load the latest model from AWS S3 Bucket."""
+        pass
 
     def _predict(self, text: str) -> int:
         """Run inference on a single text.
@@ -85,6 +88,87 @@ class TorchInferenceUseCase(IInferenceUseCase):
             prediction = torch.argmax(logits, dim=1).item()
 
         return prediction
+    
+    def _predict_proba(self, text: str) -> float:
+        """Run inference and return the probability of the positive class.
+
+        Args:
+            text: Input text to classify
+
+        Returns:
+            Probability of the positive class (between 0 and 1), or -1 if text is invalid
+        """
+        if self.model is None or self.tokenizer is None:
+            raise RuntimeError("Model and tokenizer must be loaded before inference")
+
+        # Handle NaN, None, or non-string values
+        if not isinstance(text, str) or pd.isna(text):
+            logging.warning(f"Invalid text value encountered: {type(text)}. Returning -1.")
+            return -1
+
+        # Tokenize the input text
+        encoding = self.tokenizer(
+            text,
+            truncation=True,
+            max_length=self.max_length,
+            padding="max_length",
+            return_tensors="pt",
+        )
+
+        input_ids = encoding["input_ids"].to(self.device)
+        attention_mask = encoding["attention_mask"].to(self.device)
+
+        # Run inference
+        with torch.no_grad():
+            logits = self.model(input_ids=input_ids, attention_mask=attention_mask)
+            probabilities = torch.softmax(logits, dim=1)
+            positive_class_proba = probabilities[:, 1].item()
+
+        return positive_class_proba
+
+    def predict_proba_batch(self, texts: list[str], batch_size: int) -> list[float]:
+        """Run inference on a batch of texts.
+
+        Args:
+            texts (List[str]): List of input texts to classify
+            batch_size (int): Size of each batch for inference
+
+        Returns:
+            predictions (List[float]): List of predicted probabilities for the positive class (between 0 and 1), or -1 for invalid texts
+        """
+        predictions = list()
+        
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i+batch_size]
+
+            # Tokenize the batch of texts
+            try:
+                encoding = self.tokenizer(
+                    batch_texts,
+                    truncation=True,
+                    max_length=self.max_length,
+                    padding="max_length",
+                    return_tensors="pt",
+                )
+
+                input_ids = encoding["input_ids"].to(self.device)
+                attention_mask = encoding["attention_mask"].to(self.device)
+
+                # Run inference
+                with torch.no_grad():
+                    logits = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                    probabilities = torch.softmax(logits, dim=1)
+                    positive_class_probas = probabilities[:, 1].cpu().tolist()
+            except Exception as e:
+                logging.error(f"Error during batch inference: {e}")
+                try:
+                    return [self._predict_proba(text) for text in batch_texts]
+                except Exception as e:
+                    logging.error(f"Error during fallback batch inference: {e}")
+
+            predictions.extend(positive_class_probas)
+        
+        return predictions
 
     def _get_csv_files(self, input_path: Path) -> list[Path]:
         """Get all CSV files from the input directory.

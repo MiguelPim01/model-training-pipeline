@@ -21,7 +21,13 @@ logging.basicConfig(
 )
 
 
-def download_model(tracking_uri: str, model_name: str, version: str | None = None, stage: str | None = None, device: str = "cpu") -> torch.nn.Module:
+def download_model(
+    tracking_uri: str,
+    model_name: str,
+    version: str | None = None,
+    stage: str | None = None,
+    device: str = "cpu",
+) -> torch.nn.Module:
     """
     Download a model from MLflow Model Registry.
 
@@ -56,8 +62,7 @@ def download_model(tracking_uri: str, model_name: str, version: str | None = Non
         model_uri = f"models:/{model_name}/{latest_version[0].version}"
 
         logging.info(f"Downloading model '{model_name}' version {latest_version[0].version}")
-
-    if version is not None:
+    elif version is not None:
         model_uri = f"models:/{model_name}/{version}"
         logging.info(f"Downloading model '{model_name}' version {version}")
     else:

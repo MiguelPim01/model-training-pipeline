@@ -20,7 +20,7 @@ from src.domain.pipelines.data_pipeline import ProcessedData
 
 from src.utils.metrics import save_roc_curve, save_confusion_matrix, save_metrics_report, save_training_history
 from src.utils.model import save_best_model
-from utils.mlflow_utils import deploy_run
+from src.utils.mlflow_utils import deploy_run
 
 logging.basicConfig(
     level=logging.INFO,
