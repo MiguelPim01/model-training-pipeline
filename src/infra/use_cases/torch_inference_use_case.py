@@ -1,19 +1,21 @@
 from tqdm.auto import tqdm
 from pathlib import Path
 import logging
+import boto3
 import sys
 
 from transformers import BertTokenizer
 import pandas as pd
 import torch
 
+from src.infra.classifiers.desinfo_vacinal_model import DesinfoVacinalModel
 from src.domain.use_cases.inference_use_case import IInferenceUseCase
 from src.infra.schemas.model_config import ModelConfig
 from src.utils.mlflow_utils import download_model
 
 logging.basicConfig(
     level=logging.INFO,
-    format="[%(asctime)s - %(levelname)s] %(message)s]",
+    format="[%(asctime)s - %(levelname)s] %(message)s",
     stream=sys.stdout,
 )
 
@@ -51,7 +53,43 @@ class TorchInferenceUseCase(IInferenceUseCase):
     
     def _load_s3_model(self):
         """Download and load the latest model from AWS S3 Bucket."""
-        pass
+        bucket_name = "labic-models"
+        object_key = "vacinal/best.pth"
+
+        model_dir = Path("models")
+        model_dir.mkdir(parents=True, exist_ok=True)
+
+        model_path = model_dir / "best.pth"
+
+        logging.info("Downloading model from S3...")
+        s3 = boto3.client("s3")
+        s3.download_file(bucket_name, object_key, str(model_path))
+
+        logging.info("Loading downloaded checkpoint...")
+        checkpoint = torch.load(model_path, map_location=self.device)
+
+        self.model = DesinfoVacinalModel(
+            pretrained_model_name=checkpoint.get(
+                "bert_model_name",
+                self.config.pre_trained_model,
+            ),
+            num_labels=checkpoint.get("num_classes", 2),
+            dropout_rate=(
+                self.config.parameters.dropout_rate
+                if self.config.parameters.dropout_rate is not None
+                else 0.1
+            ),
+        )
+
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.model.to(self.device)
+        self.model.eval()
+
+        self.tokenizer = BertTokenizer.from_pretrained(
+            checkpoint.get("tokenizer_name", self.config.pre_trained_model)
+        )
+
+        logging.info("Model and tokenizer loaded successfully from S3 checkpoint.")
 
     def _predict(self, text: str) -> int:
         """Run inference on a single text.

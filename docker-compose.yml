@@ -1,0 +1,29 @@
+x-common-build: &common-build
+  context: .
+
+services:
+  desinfo-inference-service:
+    profiles: ["inf"]
+    image: desinfo-inference-service
+    build:
+      <<: *common-build
+      dockerfile: Dockerfile.inference
+    ports:
+      - 8000:8000
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./:/app:cached
+    command: ["python", "api_inference.py"]
+
+  desinfo-training-service:
+    profiles: ["train"]
+    image: desinfo-training-service
+    build:
+      <<: *common-build
+      dockerfile: Dockerfile.training
+    ports:
+      - 8001:8000
+    volumes:
+      - ./:/app:cached
+    command: ["python", "api_training.py"]

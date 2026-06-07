@@ -17,14 +17,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install 'uv' by copying the binary from the official image (fastest method)
+# Install 'uv' by copying the binary from the official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Copy only dependency files first to maximize Docker layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies into the .venv directory
-# --no-install-project avoids copying source code in this layer
+# Install dependencies into the virtual environment
 RUN uv sync --frozen --no-dev --no-install-project
 
 # --- Stage 2: Runtime Stage ---
@@ -34,26 +33,24 @@ FROM python:3.10-slim
 # Re-apply runtime-specific environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    MPLCONFIGDIR=/tmp/matplotlib \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
 # Copy the pre-built virtual environment from the builder stage
-# This leaves behind the build-essential tools, making the image much smaller
 COPY --from=builder /opt/venv /opt/venv
 
 # Copy the application source code
 COPY . .
 
-# Document that the container listens on port 8000 (FastAPI default)
 EXPOSE 8000
 
 # Metadata labels
 LABEL org.opencontainers.image.source=https://github.com/labicdna/desinformacao-painel-saude
-LABEL org.opencontainers.image.description="Container image to identify misinformation in social media posts"
+LABEL org.opencontainers.image.description="Container image to retrain misinformation classification models"
 LABEL org.opencontainers.image.licenses=MIT
 
-# Run the script directly using the environment's python
-# Since we added .venv/bin to PATH, we don't need 'uv run'
-CMD ["python", "api_inference.py"]
+# Run the training API directly using the environment's python
+CMD ["python", "api_training.py"]
