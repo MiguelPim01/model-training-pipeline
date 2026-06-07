@@ -33,12 +33,13 @@ A modular, extensible pipeline for training classification models with PyTorch a
 - **MLflow integration** — Log parameters, metrics, artifacts, and deploy models
 - **YAML configuration** — Single config file drives the entire training run
 - **Metrics & visualization** — ROC curves, confusion matrices, classification reports (JSON)
+- **FastAPI training interface** — Front-end requests create PostgreSQL-backed training jobs
+- **Docker service images** — Separate training and inference runtime Dockerfiles
 
 **Out of scope:**
 
 - Distributed/multi-GPU training (single GPU only)
 - Hyperparameter search (use external tools like Optuna)
-- Inference serving (export model and deploy separately)
 
 ---
 
@@ -63,6 +64,11 @@ A modular, extensible pipeline for training classification models with PyTorch a
 
 ```
 model-training-pipeline/
+├── api_training.py             # FastAPI training API backed by PostgreSQL
+├── api_inference.py            # FastAPI inference/update API
+├── Dockerfile.training         # Training API container image
+├── Dockerfile.inference        # Inference API container image
+├── docker-compose.yml          # Training and inference service profiles
 ├── main.py                     # CLI entrypoint
 ├── pyproject.toml              # Project metadata and dependencies
 ├── uv.lock                     # Locked dependencies (reproducibility)
@@ -79,19 +85,23 @@ model-training-pipeline/
 │           ├── classification_report.json
 │           ├── confusion_matrix.png
 │           └── roc_curve.png
-└── src/
-    ├── domain/                 # Abstract interfaces (DDD-style)
-    │   ├── pipelines/          # IDataPipeline, ITrainingPipeline
-    │   ├── strategies/         # ITrainingStrategy
-    │   └── templates/          # ITrainingTemplate
-    ├── infra/                  # Concrete implementations
-    │   ├── classifiers/        # Model architectures (DesinfoVacinalModel)
-    │   ├── datasets/           # PyTorch Dataset classes
-    │   ├── pipelines/          # CSVDataPipeline, NoTestSplitPipeline
-    │   ├── schemas/            # Pydantic config models
-    │   ├── strategies/         # TorchTrainingStrategy
-    │   └── templates/          # DesinfoVacinalTemplate
-    └── utils/                  # Metrics, MLflow helpers, model saving
+├── downloads/
+│   └── training/               # Downloaded datasets for API training jobs
+├── src/
+│   ├── domain/                 # Abstract interfaces (DDD-style)
+│   │   ├── pipelines/          # IDataPipeline, ITrainingPipeline
+│   │   ├── strategies/         # ITrainingStrategy
+│   │   └── templates/          # ITrainingTemplate
+│   ├── infra/                  # Concrete implementations
+│   │   ├── classifiers/        # Model architectures (DesinfoVacinalModel)
+│   │   ├── datasets/           # PyTorch Dataset classes
+│   │   ├── pipelines/          # CSVDataPipeline, NoTestSplitPipeline
+│   │   ├── schemas/            # Pydantic config models
+│   │   ├── strategies/         # TorchTrainingStrategy
+│   │   └── templates/          # DesinfoVacinalTemplate
+│   └── utils/                  # Metrics, MLflow helpers, model saving
+└── tests/
+    └── test_api_training.py    # Training API unit tests
 ```
 
 ---
@@ -111,6 +121,10 @@ model-training-pipeline/
 - `mlflow >= 3.8`
 - `pydantic >= 2.12`
 - `pyyaml >= 6.0`
+- `fastapi >= 0.128`
+- `uvicorn >= 0.40`
+- `psycopg[binary] >= 3.3`
+- `boto3 >= 1.42`
 
 **Optional:**
 
@@ -150,13 +164,13 @@ uv run python -c "import torch; print(torch.__version__)"
 
 ## Quickstart
 
-Run a complete training pipeline:
+Run a complete training pipeline from the CLI:
 
 ```bash
 # 1. Ensure you have data in the expected location
 ls data/desinfo_vacinal/train/data.csv
 
-# 2. Run training with the example config
+# 2. Run training with your project config
 uv run python main.py --config config/<project>.yaml
 
 # 3. Check outputs
@@ -178,22 +192,200 @@ Training runs: 100%|████████████████████
 
 ## Usage
 
-### Main CLI
+### CLI Training and Inference
 
 ```bash
+# Training
+uv run python main.py --config <path-to-config.yaml>
+
+# Inference
 uv run python main.py --config <path-to-config.yaml> --inference
 ```
 
 - `--config`: Defines the path to the config file you created.
-- `--inference`: Optional argument for inference module. If **False**, training module will be run, otherwise, inference model will be run.
+- `--inference`: Runs the inference path instead of the training path.
+
+### Training API
+
+`api_training.py` is the backend interface intended for front-end training requests. It persists job state in PostgreSQL and returns immediately after accepting a job.
+
+Start it locally:
+
+```bash
+DB_URL="postgresql://user:password@localhost:5432/dbname" \
+TRAINING_TABLE_NAME="Training" \
+uv run python api_training.py
+```
+
+Create a new training job:
+
+```bash
+curl -X POST http://localhost:8000/train \
+  -H "Content-Type: application/json" \
+  -d '{
+    "by_user": "user@example.com",
+    "dataset_url": "s3://bucket/path/to/data.csv",
+    "version": "1.0"
+  }'
+```
+
+Start training from an existing database row:
+
+```bash
+curl -X POST http://localhost:8000/train \
+  -H "Content-Type: application/json" \
+  -d '{"id": "existing-training-row-id"}'
+```
+
+Check status:
+
+```bash
+curl http://localhost:8000/train/status/<training-row-id>
+```
+
+The training API accepts one active job globally. It uses PostgreSQL advisory transaction locks and rejects a new request with HTTP 409 when any row is `pending` or `in_progress`. Stale active jobs can be marked failed using `TRAINING_STALE_TIMEOUT_MINUTES`.
+
+### Training API Response Shapes
+
+Accepted jobs return:
+
+```json
+{
+  "message": "Training process started.",
+  "id": "<training row id>",
+  "status": "pending"
+}
+```
+
+Status reads return:
+
+```json
+{
+  "id": "...",
+  "by_user": "...",
+  "dataset_url": "...",
+  "model_url": "...",
+  "status": "...",
+  "log": "...",
+  "version": "...",
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
+
+### Inference API
+
+Start the inference/update API locally:
+
+```bash
+DB_URL="postgresql://user:password@localhost:5432/dbname" \
+uv run python api_inference.py
+```
+
+The inference service reads PostgreSQL rows, runs the configured inference workflow, and writes predictions back to the database.
+
+### Environment Variables
+
+| Variable | Service | Required | Default | Description |
+|----------|---------|----------|---------|-------------|
+| `DB_URL` | Training, inference | Yes | None | PostgreSQL connection URL |
+| `TRAINING_TABLE_NAME` | Training | Yes | None | Training table name used by the API |
+| `CONFIG_FILE_PATH` | Training, inference | No | `config/desinfo_vacinal.yaml` | Model config path used by API scripts |
+| `DOWNLOAD_DIR` | Training | No | `downloads/training` | Directory for resolved API training datasets |
+| `ALLOW_LOCAL_DATASET_PATHS` | Training | No | `false` | Allows local dataset paths for development only |
+| `TRAINING_STALE_TIMEOUT_MINUTES` | Training | No | `120` | Marks old `pending`/`in_progress` rows failed before accepting a new job |
+| `TRAINING_DATA_S3_BUCKET` | Training script | No | None | Existing training dataset bucket used before merging uploaded data |
+| `TRAINING_DATA_S3_PREFIX` | Training script | No | Empty | Prefix for existing S3 training CSVs |
+| `TRAINING_DATA_S3_REGION` | Training script | No | None | AWS region for S3 dataset access |
+| `ALLOW_FIRST_TRAINING_DATASET` | Training script | No | `false` | Allows first training run with only uploaded data when no S3 dataset exists |
+| `TIME_RANGE_DAYS` | Inference | No | `365` | Database record time window |
+| `UPDATE_INTERVAL_MINUTES` | Inference | No | `120` | Inference update interval |
+| `UPDATE_FILE_NAME` | Inference | No | `update_records.json` | Update tracking file name |
 
 ### Common Commands
 
 | Task | Command |
 |------|---------|
 | Train model | `uv run python main.py --config config/desinfo_vacinal.yaml` |
+| Start training API | `uv run python api_training.py` |
+| Start inference API | `uv run python api_inference.py` |
 | Start MLflow Server | `uv run mlflow server --port 5000` |
 | View metrics | `cat models/desinfo_vacinal/metrics/classification_report.json` |
+
+---
+
+## Docker
+
+The repository has separate Dockerfiles for the training API and inference API.
+
+### Build Images
+
+```bash
+docker build -f Dockerfile.training -t model-training-training .
+docker build -f Dockerfile.inference -t model-training-inference .
+```
+
+### Run the Training API Container
+
+```bash
+docker run --rm \
+  --env-file .env \
+  -p 8001:8000 \
+  -v "$PWD:/app" \
+  model-training-training
+```
+
+The training API listens on container port `8000`. This example exposes it as `http://localhost:8001` on the host.
+
+Minimum `.env` values for the training API:
+
+```dotenv
+DB_URL=postgresql://user:password@host.docker.internal:5432/dbname
+TRAINING_TABLE_NAME=Training
+CONFIG_FILE_PATH=config/desinfo_vacinal.yaml
+```
+
+Use `ALLOW_LOCAL_DATASET_PATHS=true` only for development. Production training requests should use `s3://...` dataset URLs.
+
+### Run the Inference API Container
+
+```bash
+docker run --rm \
+  --env-file .env \
+  -p 8000:8000 \
+  -v "$PWD:/app" \
+  model-training-inference
+```
+
+Minimum `.env` values for the inference API:
+
+```dotenv
+DB_URL=postgresql://user:password@host.docker.internal:5432/dbname
+CONFIG_FILE_PATH=config/desinfo_vacinal.yaml
+```
+
+### Docker Compose
+
+Start the training API profile:
+
+```bash
+docker compose --profile train up --build desinfo-training-service
+```
+
+Start the inference API profile:
+
+```bash
+docker compose --profile inf up --build desinfo-inference-service
+```
+
+Compose maps:
+
+| Service | Dockerfile | Host URL |
+|---------|------------|----------|
+| `desinfo-training-service` | `Dockerfile.training` | `http://localhost:8001` |
+| `desinfo-inference-service` | `Dockerfile.inference` | `http://localhost:8000` |
+
+The current compose inference service reads `.env`. The current compose training service does not declare `env_file: .env`, so export the required variables before starting it or pass them through your shell environment.
 
 ---
 
@@ -260,6 +452,20 @@ text,label
 "Vacinas causam autismo",desinformacao
 "Vacinas são seguras e eficazes",informacao
 ```
+
+### Dataset URLs for API Training
+
+The training API stores `dataset_url` in PostgreSQL and resolves it to a local CSV before calling `training_script.py`.
+
+Supported inputs:
+
+| Input | Support | Notes |
+|-------|---------|-------|
+| `s3://bucket/key.csv` | Supported | Uses `boto3` to download into `DOWNLOAD_DIR` |
+| Local path | Development only | Requires `ALLOW_LOCAL_DATASET_PATHS=true` |
+| `http://` or `https://` | Not currently supported | Add explicit project support before using public URLs |
+
+Resolved files must exist, be non-empty, have a `.csv` extension, and include `text` and `label` columns.
 
 ### Preprocessing Pipeline
 
@@ -442,12 +648,14 @@ class MyDataPipeline(IDataPipeline):
 ### Running Tests
 
 ```bash
-# Run all tests
-uv run pytest
+# Run the current unit tests
+.venv/bin/python -m unittest tests.test_api_training
 
-# Run with coverage
-uv run pytest --cov=src
+# Or through uv when the environment is synced
+uv run python -m unittest tests.test_api_training
 ```
+
+The project currently uses standard-library `unittest` for the training API tests. `pytest` is not declared as a project dependency.
 
 ### Linting & Formatting
 
@@ -545,4 +753,3 @@ For the pre-trained Portuguese BERT model:
 ### Maintainers
 
 - **Miguel Vieira Machado Pim** — [@MiguelPim01](https://github.com/MiguelPim01)
-

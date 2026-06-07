@@ -7,15 +7,14 @@ Basic workflow:
 3. Merge both datasets and write them to the configured training data path.
 4. Run the existing DesinfoVacinal training template.
 
-The script sends status information to the training API through a TCP socket
-connection when it is launched by api_training.py.
+The script sends status information to the training API by printing
+newline-delimited JSON events to stdout when it is launched by api_training.py.
 """
 
 import io
 import os
 import sys
 import json
-import socket
 import logging
 
 from pathlib import Path
@@ -36,51 +35,30 @@ logging.basicConfig(level=logging.INFO,
 
 load_dotenv()
 
-TRAINING_STATUS_HOST = os.getenv("TRAINING_STATUS_HOST", "localhost")
-TRAINING_STATUS_PORT = int(os.getenv("TRAINING_STATUS_PORT", 9998))
 TRAINING_DATA_S3_BUCKET = os.getenv("TRAINING_DATA_S3_BUCKET")
 TRAINING_DATA_S3_PREFIX = os.getenv("TRAINING_DATA_S3_PREFIX", "")
 TRAINING_DATA_S3_REGION = os.getenv("TRAINING_DATA_S3_REGION")
+ALLOW_FIRST_TRAINING_DATASET = os.getenv("ALLOW_FIRST_TRAINING_DATASET", "").lower() == "true"
+STATUS_EVENT_PREFIX = "TRAINING_STATUS_JSON:"
 # -----
 
 
-class StatusClient:
-    def __init__(self, job_id: str | None):
-        self.job_id = job_id
-        self.socket: socket.socket | None = None
-
-    def connect(self) -> None:
-        if self.job_id is None:
-            return
-
-        try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((TRAINING_STATUS_HOST, TRAINING_STATUS_PORT))
-        except Exception as exc:
-            logging.warning("Could not connect to training API status socket: %s", exc)
-            self.close()
-
-    def send(self, status: str, stage: str, **extra) -> None:
-        if self.socket is None:
-            return
-
-        payload = {
-            "job_id": self.job_id,
-            "status": status,
-            "stage": stage,
-            **extra,
-        }
-
-        try:
-            self.socket.sendall((json.dumps(payload) + "\n").encode("utf-8"))
-        except Exception as exc:
-            logging.warning("Could not send training status update: %s", exc)
-            self.close()
-
-    def close(self) -> None:
-        if self.socket is not None:
-            self.socket.close()
-            self.socket = None
+def send_status_event(
+    job_id: str | None,
+    status: str,
+    stage: str,
+    message: str,
+    **extra,
+) -> None:
+    payload = {
+        "type": "training_status",
+        "job_id": job_id,
+        "status": status,
+        "stage": stage,
+        "message": message,
+        **extra,
+    }
+    print(f"{STATUS_EVENT_PREFIX}{json.dumps(payload, default=str, separators=(',', ':'))}", flush=True)
 
 
 def validate_training_dataframe(df: pd.DataFrame, source: str) -> pd.DataFrame:
@@ -107,6 +85,11 @@ def get_latest_training_data() -> pd.DataFrame:
     TRAINING_DATA_S3_BUCKET/TRAINING_DATA_S3_PREFIX.
     """
     if not TRAINING_DATA_S3_BUCKET:
+        if ALLOW_FIRST_TRAINING_DATASET:
+            logging.warning(
+                "TRAINING_DATA_S3_BUCKET is not set. Continuing with uploaded data only."
+            )
+            return pd.DataFrame(columns=["text", "label"])
         raise RuntimeError("TRAINING_DATA_S3_BUCKET environment variable is required.")
 
     client_kwargs = {}
@@ -130,9 +113,11 @@ def get_latest_training_data() -> pd.DataFrame:
 
     if latest_object is None:
         prefix = TRAINING_DATA_S3_PREFIX or "<bucket root>"
-        raise FileNotFoundError(
-            f"No CSV training datasets found in s3://{TRAINING_DATA_S3_BUCKET}/{prefix}"
-        )
+        message = f"No CSV training datasets found in s3://{TRAINING_DATA_S3_BUCKET}/{prefix}"
+        if ALLOW_FIRST_TRAINING_DATASET:
+            logging.warning("%s. Continuing with uploaded data only.", message)
+            return pd.DataFrame(columns=["text", "label"])
+        raise FileNotFoundError(message)
 
     latest_key = latest_object["Key"]
     logging.info("Downloading latest training dataset from s3://%s/%s", TRAINING_DATA_S3_BUCKET, latest_key)
@@ -158,8 +143,13 @@ def load_uploaded_training_data(uploaded_data_path: Path) -> pd.DataFrame:
 
 
 def merge_training_data(latest_df: pd.DataFrame, uploaded_df: pd.DataFrame) -> pd.DataFrame:
-    latest_df = validate_training_dataframe(latest_df, "Latest S3 training dataset")
     uploaded_df = validate_training_dataframe(uploaded_df, "Uploaded training dataset")
+
+    if latest_df.empty and ALLOW_FIRST_TRAINING_DATASET:
+        logging.info("No previous S3 training dataset found; using uploaded data only.")
+        latest_df = pd.DataFrame(columns=uploaded_df.columns)
+    else:
+        latest_df = validate_training_dataframe(latest_df, "Latest S3 training dataset")
 
     merged_df = pd.concat([latest_df, uploaded_df], ignore_index=True)
     merged_df = merged_df.dropna(subset=["text", "label"]).copy()
@@ -209,29 +199,37 @@ def parse_args():
 
 def main() -> int:
     args = parse_args()
-    status_client = StatusClient(job_id=args.job_id)
-    status_client.connect()
 
     try:
-        status_client.send("in_progress", "loading_config")
+        send_status_event(args.job_id, "in_progress", "loading_config", "Loading config file")
         logging.info("Loading config file: %s", args.config)
         model_config = parse_file(args.config)
 
-        status_client.send("in_progress", "loading_s3_dataset")
+        send_status_event(args.job_id, "in_progress", "loading_s3_dataset", "Loading latest training dataset from S3")
         latest_df = get_latest_training_data()
-        logging.info("Latest S3 training dataset loaded with %d rows", len(latest_df))
+        if latest_df.empty and ALLOW_FIRST_TRAINING_DATASET:
+            send_status_event(
+                args.job_id,
+                "in_progress",
+                "loading_s3_dataset",
+                "No previous S3 dataset found; using uploaded data only",
+            )
+        else:
+            logging.info("Latest S3 training dataset loaded with %d rows", len(latest_df))
 
-        status_client.send("in_progress", "loading_uploaded_dataset")
+        send_status_event(args.job_id, "in_progress", "loading_uploaded_dataset", "Loading uploaded training dataset")
         uploaded_df = load_uploaded_training_data(Path(args.uploaded_data))
         logging.info("Uploaded training dataset loaded with %d rows", len(uploaded_df))
 
-        status_client.send("in_progress", "merging_dataset")
+        send_status_event(args.job_id, "in_progress", "merging_dataset", "Merging training datasets")
         merged_df = merge_training_data(latest_df, uploaded_df)
         output_path = write_training_data(merged_df, model_config.data.data_dir)
 
-        status_client.send(
+        send_status_event(
+            args.job_id,
             "in_progress",
             "training",
+            "Starting training pipeline",
             training_data_path=str(output_path),
             training_rows=len(merged_df),
         )
@@ -239,15 +237,31 @@ def main() -> int:
         template = DesinfoVacinalTemplate(config=model_config, inference=False)
         template.run()
 
-        status_client.send("completed", "completed", training_rows=len(merged_df))
+        model_path = Path("models") / Path(model_config.data.data_dir).name / "best_model.pth"
+        if model_path.exists():
+            send_status_event(
+                args.job_id,
+                "completed",
+                "completed",
+                "Training completed successfully",
+                training_rows=len(merged_df),
+                model_url=str(model_path),
+            )
+        else:
+            logging.warning("Model artifact not found at %s", model_path)
+            send_status_event(
+                args.job_id,
+                "completed",
+                "completed",
+                "Training completed successfully, but model artifact was not found",
+                training_rows=len(merged_df),
+            )
         logging.info("Training completed successfully")
         return 0
     except Exception as exc:
         logging.exception("Training failed")
-        status_client.send("failed", "failed", error=str(exc))
+        send_status_event(args.job_id, "failed", "failed", "Training failed", error=str(exc))
         return 1
-    finally:
-        status_client.close()
 
 
 if __name__ == "__main__":
