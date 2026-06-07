@@ -46,6 +46,8 @@ CONFIG_FILE_PATH = os.getenv("CONFIG_FILE_PATH", "config/desinfo_vacinal.yaml")
 DB_URL = os.getenv("DB_URL")
 TRAINING_TABLE_NAME = os.getenv("TRAINING_TABLE_NAME")
 TRAINING_STALE_TIMEOUT_MINUTES = int(os.getenv("TRAINING_STALE_TIMEOUT_MINUTES", 120))
+TRAINING_HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("TRAINING_HEARTBEAT_INTERVAL_SECONDS", 60))
+TRAINING_HEARTBEAT_LOG_INTERVAL_SECONDS = int(os.getenv("TRAINING_HEARTBEAT_LOG_INTERVAL_SECONDS", 0))
 
 API_HOST = os.getenv("API_HOST", "::")
 API_PORT = int(os.getenv("API_PORT", 8000))
@@ -218,6 +220,9 @@ def acquire_training_advisory_lock(cursor):
     )
 
 def fail_stale_training_jobs(cursor):
+    if TRAINING_STALE_TIMEOUT_MINUTES <= 0:
+        return []
+
     table = get_training_table_identifier()
     stale_message = append_log(None, "Training job marked failed because it exceeded the stale timeout.")
     cursor.execute(
@@ -249,6 +254,57 @@ def fail_stale_training_jobs(cursor):
         ("failed", stale_message, "pending", "in_progress", TRAINING_STALE_TIMEOUT_MINUTES),
     )
     return cursor.fetchall() if hasattr(cursor, "fetchall") else []
+
+def touch_training_job_updated_at(job_id, log_message=None):
+    table = get_training_table_identifier()
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            if log_message is None:
+                cursor.execute(
+                    sql.SQL(
+                        """
+                        UPDATE {}
+                        SET {} = NOW()
+                        WHERE {} = %s
+                        RETURNING *
+                        """
+                    ).format(
+                        table,
+                        sql.Identifier("updatedAt"),
+                        sql.Identifier("id"),
+                    ),
+                    (job_id,),
+                )
+                return cursor.fetchone()
+
+            cursor.execute(
+                sql.SQL("SELECT {} FROM {} WHERE {} = %s").format(
+                    sql.Identifier("log"),
+                    table,
+                    sql.Identifier("id"),
+                ),
+                (job_id,),
+            )
+            row = cursor.fetchone()
+            existing_log = row["log"] if row else None
+            cursor.execute(
+                sql.SQL(
+                    """
+                    UPDATE {}
+                    SET {} = %s, {} = NOW()
+                    WHERE {} = %s
+                    RETURNING *
+                    """
+                ).format(
+                    table,
+                    sql.Identifier("log"),
+                    sql.Identifier("updatedAt"),
+                    sql.Identifier("id"),
+                ),
+                (append_log(existing_log, log_message), job_id),
+            )
+            return cursor.fetchone()
 
 def fetch_active_training_job_for_update(cursor):
     table = get_training_table_identifier()
@@ -515,6 +571,26 @@ def stream_child_stderr(pipe, stderr_lines: list[str]) -> None:
         logging.info("[training-child:stderr] %s", stripped_line)
     pipe.close()
 
+def wait_for_child_with_heartbeat(child: subprocess.Popen, job_id: str) -> int:
+    heartbeat_count = 0
+    interval = max(TRAINING_HEARTBEAT_INTERVAL_SECONDS, 1)
+    log_interval = max(TRAINING_HEARTBEAT_LOG_INTERVAL_SECONDS, 0)
+
+    while True:
+        try:
+            return child.wait(timeout=interval)
+        except subprocess.TimeoutExpired:
+            heartbeat_count += 1
+            log_message = None
+            if log_interval > 0 and heartbeat_count * interval >= log_interval:
+                log_message = "Training heartbeat: child process is still running."
+                heartbeat_count = 0
+
+            try:
+                touch_training_job_updated_at(job_id, log_message=log_message)
+            except Exception:
+                logging.exception("Could not update heartbeat for training job %s", job_id)
+
 def validate_training_csv(file_path: Path) -> pd.DataFrame:
     try:
         df = pd.read_csv(file_path)
@@ -687,7 +763,7 @@ def training_child_process(dataset_url: str, job_id: str) -> None:
             )
             stderr_thread.start()
 
-        return_code = child.wait()
+        return_code = wait_for_child_with_heartbeat(child, job_id)
         if stdout_thread is not None:
             stdout_thread.join(timeout=5)
         if stderr_thread is not None:

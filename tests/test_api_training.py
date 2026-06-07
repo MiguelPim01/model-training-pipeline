@@ -78,7 +78,7 @@ class FakeProcess:
         self.stderr = io.StringIO(stderr)
         self.terminated = False
 
-    def wait(self):
+    def wait(self, timeout=None):
         return self.return_code
 
     def poll(self):
@@ -86,6 +86,19 @@ class FakeProcess:
 
     def terminate(self):
         self.terminated = True
+
+
+class LongRunningFakeProcess(FakeProcess):
+    def __init__(self, timeouts_before_exit=1, return_code=0):
+        super().__init__(return_code=return_code, stdout="", stderr="")
+        self.timeouts_before_exit = timeouts_before_exit
+        self.wait_calls = 0
+
+    def wait(self, timeout=None):
+        self.wait_calls += 1
+        if self.wait_calls <= self.timeouts_before_exit:
+            raise api_training.subprocess.TimeoutExpired(cmd="training", timeout=timeout)
+        return self.return_code
 
 
 class ApiTrainingTests(unittest.TestCase):
@@ -202,6 +215,23 @@ class ApiTrainingTests(unittest.TestCase):
             self.assertEqual(caught.exception.status_code, 409)
             self.assertEqual(caught.exception.detail["active_job"]["status"], status)
 
+    def test_in_progress_job_with_fresh_updated_at_blocks_new_jobs(self):
+        active_job = {"id": "fresh-active", "status": "in_progress", "updatedAt": "fresh"}
+        cursor = FakeCursor(rows=[active_job])
+
+        with (
+            patch.object(api_training, "TRAINING_TABLE_NAME", "Training"),
+            patch.object(api_training, "TRAINING_STALE_TIMEOUT_MINUTES", 120),
+            patch.object(api_training, "get_db_connection", return_value=FakeConnection(cursor)),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                api_training.accept_training_job(
+                    api_training.TrainingRequest(dataset_url="s3://bucket/data.csv")
+                )
+
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(caught.exception.detail["active_job"]["id"], "fresh-active")
+
     def test_accept_training_job_allows_completed_or_failed_jobs(self):
         for status in ("completed", "failed"):
             cursor = FakeCursor(rows=[None, {"id": f"job-{status}", "dataset_url": "s3://bucket/data.csv", "status": "pending"}])
@@ -239,6 +269,32 @@ class ApiTrainingTests(unittest.TestCase):
         self.assertIn("Training job marked failed", params[1])
         self.assertIn("pending", params)
         self.assertIn("in_progress", params)
+
+    def test_stale_cleanup_disabled_does_not_fail_active_rows(self):
+        cursor = FakeCursor(all_rows=[{"id": "stale", "status": "failed", "updatedAt": "now"}])
+
+        with (
+            patch.object(api_training, "TRAINING_TABLE_NAME", "Training"),
+            patch.object(api_training, "TRAINING_STALE_TIMEOUT_MINUTES", 0),
+        ):
+            rows = api_training.fail_stale_training_jobs(cursor)
+
+        self.assertEqual(rows, [])
+        self.assertEqual(cursor.executed, [])
+
+    def test_old_in_progress_job_can_be_failed_when_stale_cleanup_enabled(self):
+        cursor = FakeCursor(all_rows=[{"id": "old-active", "status": "failed", "updatedAt": "now"}])
+
+        with (
+            patch.object(api_training, "TRAINING_TABLE_NAME", "Training"),
+            patch.object(api_training, "TRAINING_STALE_TIMEOUT_MINUTES", 120),
+        ):
+            rows = api_training.fail_stale_training_jobs(cursor)
+
+        self.assertEqual(rows[0]["id"], "old-active")
+        _, params = cursor.executed[0]
+        self.assertIn("in_progress", params)
+        self.assertEqual(params[-1], 120)
 
     def test_get_train_status_reads_postgresql_row(self):
         row = {
@@ -280,6 +336,51 @@ class ApiTrainingTests(unittest.TestCase):
         self.assertEqual(cursor.executed[-1][1][-1], "job-4")
         self.assertIn("old log\n", cursor.executed[-1][1][1])
         self.assertIn("new event", cursor.executed[-1][1][1])
+
+    def test_touch_training_job_updated_at_updates_only_updated_at_without_log(self):
+        cursor = FakeCursor(rows=[{"id": "job-touch"}])
+
+        with (
+            patch.object(api_training, "TRAINING_TABLE_NAME", "Training"),
+            patch.object(api_training, "get_db_connection", return_value=FakeConnection(cursor)),
+        ):
+            api_training.touch_training_job_updated_at("job-touch")
+
+        self.assertEqual(len(cursor.executed), 1)
+        query, params = cursor.executed[0]
+        self.assertEqual(params, ("job-touch",))
+        self.assertIn("updatedAt", str(query))
+        self.assertNotIn("log", str(query))
+
+    def test_long_running_subprocess_heartbeats_updated_at_while_running(self):
+        process = LongRunningFakeProcess(timeouts_before_exit=2, return_code=0)
+        calls = []
+
+        with (
+            patch.object(api_training, "TRAINING_HEARTBEAT_INTERVAL_SECONDS", 1),
+            patch.object(api_training, "TRAINING_HEARTBEAT_LOG_INTERVAL_SECONDS", 0),
+            patch.object(api_training, "touch_training_job_updated_at", side_effect=lambda *args, **kwargs: calls.append((args, kwargs))),
+        ):
+            return_code = api_training.wait_for_child_with_heartbeat(process, "job-heartbeat")
+
+        self.assertEqual(return_code, 0)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(call[0] == ("job-heartbeat",) for call in calls))
+        self.assertTrue(all(call[1]["log_message"] is None for call in calls))
+
+    def test_heartbeat_can_log_without_logging_every_heartbeat(self):
+        process = LongRunningFakeProcess(timeouts_before_exit=3, return_code=0)
+        calls = []
+
+        with (
+            patch.object(api_training, "TRAINING_HEARTBEAT_INTERVAL_SECONDS", 10),
+            patch.object(api_training, "TRAINING_HEARTBEAT_LOG_INTERVAL_SECONDS", 20),
+            patch.object(api_training, "touch_training_job_updated_at", side_effect=lambda *args, **kwargs: calls.append((args, kwargs))),
+        ):
+            api_training.wait_for_child_with_heartbeat(process, "job-heartbeat-log")
+
+        log_messages = [kwargs["log_message"] for _, kwargs in calls]
+        self.assertEqual(log_messages, [None, "Training heartbeat: child process is still running.", None])
 
     def test_append_log_appends_timestamped_lines(self):
         first = api_training.append_log(None, "first")
@@ -324,6 +425,23 @@ class ApiTrainingTests(unittest.TestCase):
 
         self.assertTrue(any(kwargs.get("status") == "completed" for _, kwargs in calls))
         self.assertTrue(any(kwargs.get("model_url") == "models/project/best_model.pth" for _, kwargs in calls))
+
+    def test_second_job_cannot_be_accepted_while_first_child_process_is_alive(self):
+        active_job = {"id": "alive-job", "status": "in_progress", "updatedAt": "fresh"}
+        cursor = FakeCursor(rows=[active_job])
+
+        with (
+            patch.object(api_training, "TRAINING_TABLE_NAME", "Training"),
+            patch.object(api_training, "TRAINING_STALE_TIMEOUT_MINUTES", 120),
+            patch.object(api_training, "get_db_connection", return_value=FakeConnection(cursor)),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                api_training.accept_training_job(
+                    api_training.TrainingRequest(dataset_url="s3://bucket/second.csv")
+                )
+
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(caught.exception.detail["active_job"]["id"], "alive-job")
 
     def test_dataset_url_resolver_rejects_local_paths_unless_allowed(self):
         with (
