@@ -24,6 +24,10 @@ from threading import Thread, Event
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
+logging.basicConfig(level=logging.INFO,
+                    format='[%(asctime)s - %(levelname)s] %(message)s',
+                    stream=sys.stdout)
+
 # ----- Configuration -----
 load_dotenv()
 
@@ -60,6 +64,11 @@ healthy_update = True # Indicates if the update process by the child process is 
 
 stop_event = Event()
 # -----
+
+def stream_child_logs(pipe, prefix):
+    for line in iter(pipe.readline, ""):
+        logging.info("%s %s", prefix, line.rstrip())
+    pipe.close()
 
 def update():
     """
@@ -137,13 +146,41 @@ def inference_child_process_handler():
     global healthy_classification
     global healthy_update
     
+    logging.info("Setting up socket server for communication with child process.")
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind(("localhost", 9999))
     server.listen(1)
     
     # sys.executable uses the exact same python that the current script is running on
-    child = subprocess.Popen([sys.executable, "-m", "src.scripts.inference_script", "--config", CONFIG_FILE_PATH])
+    logging.info("Running inference process.")
+    child = subprocess.Popen([
+            sys.executable, 
+            "-u", 
+            "-m", 
+            "src.scripts.inference_script", 
+            "--config", 
+            CONFIG_FILE_PATH
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    
+    # Threads for seeing the logs diferently for diferent processes
+    Thread(
+        target=stream_child_logs,
+        args=(child.stdout, "[inference-child]"),
+        daemon=True,
+    ).start()
+
+    Thread(
+        target=stream_child_logs,
+        args=(child.stderr, "[inference-child:stderr]"),
+        daemon=True,
+    ).start()
+    
     conn, addr = server.accept() # wait for connection from child process
     
     logging.info("Child process started and connected.")

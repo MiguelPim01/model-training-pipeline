@@ -29,7 +29,7 @@ from src.infra.use_cases.torch_inference_use_case import TorchInferenceUseCase
 
 # ----- Configuration -----
 logging.basicConfig(level=logging.INFO,
-                    format='[%(asctime)s - %(levelname)s - %(message)s]',
+                    format='[%(asctime)s - %(levelname)s] %(message)s',
                     stream=sys.stdout)
 
 load_dotenv()
@@ -165,8 +165,10 @@ def main():
     s.connect((("localhost", 9999)))
     
     # Creates the inference use case instance
+    logging.info(f"Loading config file: {config_file_path}")
     model_config = parse_file(config_file_path)
     inference_use_case = TorchInferenceUseCase(config=model_config)
+    inference_use_case._load_s3_model() # Loads the model from the s3 bucket
     
     global healthy_classification
     global healthy_update

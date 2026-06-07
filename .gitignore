@@ -25,3 +25,12 @@ models/
 
 # Env
 .env
+
+# TODO
+TODO.md
+
+# Logs
+update_records.json
+
+# Agents
+AGENTS.md
