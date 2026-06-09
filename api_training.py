@@ -45,6 +45,7 @@ load_dotenv()
 CONFIG_FILE_PATH = os.getenv("CONFIG_FILE_PATH", "config/desinfo_vacinal.yaml")
 DB_URL = os.getenv("DB_URL")
 TRAINING_TABLE_NAME = os.getenv("TRAINING_TABLE_NAME")
+TRAINING_TABLE_SCHEMA = os.getenv("TRAINING_TABLE_SCHEMA") or "model"
 TRAINING_STALE_TIMEOUT_MINUTES = int(os.getenv("TRAINING_STALE_TIMEOUT_MINUTES", 120))
 TRAINING_HEARTBEAT_INTERVAL_SECONDS = int(os.getenv("TRAINING_HEARTBEAT_INTERVAL_SECONDS", 60))
 TRAINING_HEARTBEAT_LOG_INTERVAL_SECONDS = int(os.getenv("TRAINING_HEARTBEAT_LOG_INTERVAL_SECONDS", 0))
@@ -90,7 +91,7 @@ def get_training_table_identifier() -> sql.Identifier:
             "name is defined in this repository."
         )
 
-    return sql.Identifier(TRAINING_TABLE_NAME)
+    return sql.Identifier(TRAINING_TABLE_SCHEMA, TRAINING_TABLE_NAME)
 
 def fetch_training_job(job_id):
     table = get_training_table_identifier()
@@ -811,7 +812,7 @@ async def lifespan(app: FastAPI):
     if not TRAINING_TABLE_NAME:
         raise RuntimeError(
             "TRAINING_TABLE_NAME environment variable is required for api_training.py because "
-            "the training table name is not defined in this repository."
+            "the schema-qualified training table name is not defined in this repository."
         )
     
     yield

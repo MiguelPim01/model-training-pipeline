@@ -108,6 +108,23 @@ class ApiTrainingTests(unittest.TestCase):
     def tearDown(self):
         api_training.active_job_id = None
 
+    def test_training_table_identifier_uses_model_schema_by_default(self):
+        identifiers = []
+        original_identifier = api_training.sql.Identifier
+
+        def record_identifier(*names):
+            identifiers.append(names)
+            return original_identifier(*names)
+
+        with (
+            patch.object(api_training, "TRAINING_TABLE_NAME", "Training"),
+            patch.object(api_training, "TRAINING_TABLE_SCHEMA", "model"),
+            patch.object(api_training.sql, "Identifier", side_effect=record_identifier),
+        ):
+            api_training.get_training_table_identifier()
+
+        self.assertEqual(identifiers, [("model", "Training")])
+
     def test_post_train_existing_id_fetches_row_and_starts_background_training(self):
         row = {"id": "job-1", "dataset_url": "s3://bucket/data.csv", "status": "ready"}
 
@@ -331,6 +348,7 @@ class ApiTrainingTests(unittest.TestCase):
         ):
             api_training.update_training_job("job-4", status="failed", log_message="new event")
 
+        self.assertIn(("model", "Training"), identifiers)
         self.assertIn(("updatedAt",), identifiers)
         self.assertIn(("log",), identifiers)
         self.assertEqual(cursor.executed[-1][1][-1], "job-4")
