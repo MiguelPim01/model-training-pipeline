@@ -213,6 +213,7 @@ Start it locally:
 
 ```bash
 DB_URL="postgresql://user:password@localhost:5432/dbname" \
+TRAINING_TABLE_SCHEMA="model" \
 TRAINING_TABLE_NAME="Training" \
 uv run python api_training.py
 ```
@@ -289,6 +290,7 @@ The inference service reads PostgreSQL rows, runs the configured inference workf
 | Variable | Service | Required | Default | Description |
 |----------|---------|----------|---------|-------------|
 | `DB_URL` | Training, inference | Yes | None | PostgreSQL connection URL |
+| `TRAINING_TABLE_SCHEMA` | Training | No | `model` | PostgreSQL schema containing the training table |
 | `TRAINING_TABLE_NAME` | Training | Yes | None | Training table name used by the API |
 | `CONFIG_FILE_PATH` | Training, inference | No | `config/desinfo_vacinal.yaml` | Model config path used by API scripts |
 | `DOWNLOAD_DIR` | Training | No | `downloads/training` | Directory for resolved API training datasets |
@@ -341,6 +343,7 @@ Minimum `.env` values for the training API:
 
 ```dotenv
 DB_URL=postgresql://user:password@host.docker.internal:5432/dbname
+TRAINING_TABLE_SCHEMA=model
 TRAINING_TABLE_NAME=Training
 CONFIG_FILE_PATH=config/desinfo_vacinal.yaml
 ```
